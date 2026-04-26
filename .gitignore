@@ -38,6 +38,9 @@ yarn-error.log*
 /supabase/.temp/
 /supabase/.branches/
 
+# worklogs are local-only — they're for context restoration, not artifacts
+/worklogs/
+
 # vercel
 .vercel
 

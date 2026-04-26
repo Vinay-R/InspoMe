@@ -10,6 +10,12 @@ const CreateSchema = z.object({
   note: z.string().max(280).optional().nullable(),
 });
 
+// Wraps a value for PostgREST's `.or()` filter so reserved characters
+// (`,`, `.`, `:`, `(`, `)`) inside the value don't break the filter syntax.
+function postgrestQuoteValue(v: string): string {
+  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -123,8 +129,13 @@ export async function GET(request: NextRequest) {
   if (platform) query = query.eq("platform", platform);
   if (analysisStatus) query = query.eq("analysis_status", analysisStatus);
   if (search) {
-    const term = `%${search.replace(/[%_]/g, "\\$&")}%`;
-    query = query.or(`caption.ilike.${term},creator_handle.ilike.${term}`);
+    // Escape ILIKE wildcards in the term, then wrap the whole value in
+    // double quotes so PostgREST's `.or()` parser treats it as a single
+    // value even if it contains commas, periods, or parens. Without this
+    // wrap, a search like `,id.eq.<uuid>` would inject extra filters.
+    const ilikeTerm = `%${search.replace(/[%_]/g, "\\$&")}%`;
+    const safe = postgrestQuoteValue(ilikeTerm);
+    query = query.or(`caption.ilike.${safe},creator_handle.ilike.${safe}`);
   }
 
   const { data, error } = await query;

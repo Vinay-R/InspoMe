@@ -25,6 +25,13 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Defense-in-depth: RLS already filters this query to the session user's
+  // rows, so reaching here with a mismatched user_id implies a misconfigured
+  // policy. Fail closed instead of silently triggering work for another user.
+  if (inspo.user_id !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   await supabase
     .from("inspo")
     .update({ analysis_status: "queued", media_status: "queued" })
@@ -32,7 +39,7 @@ export async function POST(
 
   const result = await getIngestionService().enqueue({
     inspoId: inspo.id,
-    userId: inspo.user_id,
+    userId: user.id,
     url: inspo.url_original,
     platform: inspo.platform,
   });
