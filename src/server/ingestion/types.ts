@@ -1,4 +1,5 @@
 import type { Platform } from "@/lib/supabase/types";
+import type { AnalysisData } from "./analysis-schema";
 
 export type MediaDownloadResult = {
   success: boolean;
@@ -49,21 +50,7 @@ export type AnalysisResult = {
   modelName: string;
   promptVersion: string;
   schemaVersion: string;
-  data: {
-    summary: string;
-    content_category: string | null;
-    primary_topic: string | null;
-    target_audience: string | null;
-    why_it_worked: unknown;
-    hook: unknown;
-    structure: unknown;
-    visuals: unknown;
-    audio: unknown;
-    editing: unknown;
-    reusable_pattern: unknown;
-    tags: unknown;
-    search_summary: string;
-  };
+  data: AnalysisData;
 };
 
 export interface VideoAnalysisProvider {

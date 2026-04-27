@@ -7,11 +7,13 @@ import type {
 } from "../types";
 
 /**
- * Phase 1 stub. Returns a structurally-valid analysis the UI can render.
- * Replaced in Phase 2 by a real Gemini call (multimodal video understanding).
+ * Fresh-clone fallback. Used when GEMINI_API_KEY isn't set, so `git clone &&
+ * npm run dev` exercises the full UI without spending tokens on the real model.
+ * In all real environments (Vercel, dev with .env.local), `service.ts` picks
+ * the real GeminiProvider.
  *
- * The output deliberately incorporates user context so designers can verify
- * personalization wires through correctly before the real model is connected.
+ * Returns a structurally-valid analysis that incorporates user context so
+ * personalization wiring stays verifiable end-to-end without a live model call.
  */
 export class StubGeminiProvider implements VideoAnalysisProvider {
   readonly name = "stub-gemini";

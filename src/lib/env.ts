@@ -40,4 +40,7 @@ export const serverEnv = {
   get cobaltApiUrl(): string | null {
     return process.env.COBALT_API_URL ?? null;
   },
+  get cobaltApiKey(): string | null {
+    return process.env.COBALT_API_KEY ?? null;
+  },
 };

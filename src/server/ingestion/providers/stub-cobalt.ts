@@ -7,12 +7,13 @@ import type {
 import { parseInspoUrl } from "@/lib/platform";
 
 /**
- * Phase 1 stub. Returns a simulated download result so the rest of the pipeline
- * (Gemini analysis, UI status transitions) can be exercised without depending
- * on the real Cobalt fork being deployed.
+ * Fresh-clone fallback. Used when COBALT_API_URL / COBALT_API_KEY aren't set,
+ * so `git clone && npm run dev` exercises the full UI without standing up the
+ * real Cobalt instance. In all real environments (Vercel, dev with .env.local),
+ * `service.ts` picks the real CobaltProvider.
  *
- * In Phase 2 this is replaced by an HTTP client that talks to COBALT_API_URL.
- * Nothing else in the system changes.
+ * Returns a simulated download result with no actual media file — the analyze
+ * step will use the stub Gemini provider in tandem.
  */
 export class StubCobaltProvider implements MediaDownloadProvider {
   readonly name = "stub-cobalt";

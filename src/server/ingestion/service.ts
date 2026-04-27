@@ -6,17 +6,20 @@ import type {
   MediaDownloadProvider,
   VideoAnalysisProvider,
 } from "./types";
+import { CobaltProvider } from "./providers/cobalt";
+import { GeminiProvider } from "./providers/gemini";
 import { StubCobaltProvider } from "./providers/stub-cobalt";
 import { StubGeminiProvider } from "./providers/stub-gemini";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { serverEnv } from "@/lib/env";
 
 /**
  * Owns the lifecycle of a single ingestion job:
  *   inspo → download → analyze → persist → update inspo statuses
  *
- * Phase 1 runs the work inline via setImmediate so we don't need a real queue.
- * Phase 2 swaps the inline runner for a queued worker (Vercel Workflow / a job
- * runner) without touching callers.
+ * Currently runs the work inline via queueMicrotask so we don't need a real
+ * queue. The next pass moves this to Vercel's `waitUntil` (or a real queue)
+ * so cold-starts don't terminate the function before analysis completes.
  */
 export class InlineIngestionService implements ContentIngestionService {
   constructor(
@@ -291,12 +294,28 @@ export class InlineIngestionService implements ContentIngestionService {
 
 let cached: InlineIngestionService | null = null;
 
+// Provider selection follows env presence: if the production credential is
+// set, use the real provider; otherwise fall back to a stub. This keeps
+// `npm run dev` workable on a fresh clone without external services, while
+// production (env set in Vercel) automatically goes live.
+function selectDownloader(): MediaDownloadProvider {
+  if (serverEnv.cobaltApiUrl && serverEnv.cobaltApiKey) {
+    return new CobaltProvider();
+  }
+  return new StubCobaltProvider();
+}
+
+function selectAnalyzer(): VideoAnalysisProvider {
+  const key = serverEnv.geminiApiKey;
+  if (key) {
+    return new GeminiProvider(key);
+  }
+  return new StubGeminiProvider();
+}
+
 export function getIngestionService(): ContentIngestionService {
   if (!cached) {
-    cached = new InlineIngestionService(
-      new StubCobaltProvider(),
-      new StubGeminiProvider(),
-    );
+    cached = new InlineIngestionService(selectDownloader(), selectAnalyzer());
   }
   return cached;
 }
