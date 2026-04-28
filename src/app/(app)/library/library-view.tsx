@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
+  Search,
   Sparkles,
   ExternalLink,
   Loader2,
@@ -41,25 +42,69 @@ type InspoCard = {
 interface Props {
   initialInspo: InspoCard[];
   welcome: boolean;
+  initialQ: string;
 }
 
-export function LibraryView({ initialInspo, welcome }: Props) {
+export function LibraryView({ initialInspo, welcome, initialQ }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentQ = searchParams.get("q") ?? "";
+  const currentPlatform = searchParams.get("platform") ?? "";
+
   const [inspo, setInspo] = React.useState<InspoCard[]>(initialInspo);
+
   const [showAdd, setShowAdd] = React.useState(initialInspo.length === 0 && welcome);
   const [showWelcome, setShowWelcome] = React.useState(welcome);
+  const [searchInput, setSearchInput] = React.useState(initialQ);
+  const [activeReasons, setActiveReasons] = React.useState<string[]>([]);
 
-  // Poll while any card is mid-enrichment so the user sees progressive updates
-  // without having to refresh.
+  // Debounced search → update URL (skip on mount to avoid spurious navigation).
+  const isFirstSearchRender = React.useRef(true);
+  React.useEffect(() => {
+    if (isFirstSearchRender.current) {
+      isFirstSearchRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams();
+      if (searchInput.trim()) params.set("q", searchInput.trim());
+      if (currentPlatform) params.set("platform", currentPlatform);
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : "?", { scroll: false });
+    }, 350);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
+  function setPlatform(p: string) {
+    const params = new URLSearchParams();
+    if (currentQ) params.set("q", currentQ);
+    if (p) params.set("platform", p);
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : "?", { scroll: false });
+  }
+
+  function clearFilters() {
+    setSearchInput("");
+    setActiveReasons([]);
+    router.replace("?", { scroll: false });
+  }
+
+  // Poll while any card is mid-enrichment so the user sees progressive updates.
   React.useEffect(() => {
     const hasPending = inspo.some(
-      (i) =>
-        i.analysis_status === "queued" || i.analysis_status === "processing",
+      (i) => i.analysis_status === "queued" || i.analysis_status === "processing",
     );
     if (!hasPending) return;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/inspo", { cache: "no-store" });
+        const params = new URLSearchParams();
+        if (currentQ) params.set("search", currentQ);
+        if (currentPlatform) params.set("platform", currentPlatform);
+        const qs = params.toString();
+        const res = await fetch(qs ? `/api/inspo?${qs}` : "/api/inspo", {
+          cache: "no-store",
+        });
         if (!res.ok) return;
         const json = await res.json();
         if (Array.isArray(json.data)) setInspo(json.data);
@@ -68,13 +113,19 @@ export function LibraryView({ initialInspo, welcome }: Props) {
       }
     }, 2500);
     return () => clearInterval(interval);
-  }, [inspo]);
+  }, [inspo, currentQ, currentPlatform]);
+
+  // Client-side save-reason filter applied on top of server-filtered results.
+  const filteredInspo =
+    activeReasons.length === 0
+      ? inspo
+      : inspo.filter((i) => activeReasons.every((r) => i.save_reasons.includes(r)));
+
+  const isFiltering = currentQ !== "" || currentPlatform !== "" || activeReasons.length > 0;
 
   return (
     <div className="flex flex-1 flex-col gap-5">
-      {showWelcome && (
-        <WelcomeBanner onDismiss={() => setShowWelcome(false)} />
-      )}
+      {showWelcome && <WelcomeBanner onDismiss={() => setShowWelcome(false)} />}
 
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -82,9 +133,11 @@ export function LibraryView({ initialInspo, welcome }: Props) {
             Your Inspo
           </h1>
           <p className="text-sm text-muted-foreground">
-            {inspo.length === 0
+            {inspo.length === 0 && !isFiltering
               ? "Save TikTok and Instagram links to start your library."
-              : `${inspo.length} saved · understand why each one works`}
+              : isFiltering
+                ? `${filteredInspo.length} result${filteredInspo.length !== 1 ? "s" : ""}`
+                : `${inspo.length} saved · understand why each one works`}
           </p>
         </div>
         {!showAdd && (
@@ -111,15 +164,109 @@ export function LibraryView({ initialInspo, welcome }: Props) {
         />
       )}
 
-      {inspo.length === 0 && !showAdd ? (
-        <EmptyState onClickAdd={() => setShowAdd(true)} />
+      {/* Filter bar — only show when library has content or filters are active */}
+      {(inspo.length > 0 || isFiltering) && (
+        <FilterBar
+          searchInput={searchInput}
+          onSearchChange={setSearchInput}
+          currentPlatform={currentPlatform}
+          onPlatformChange={setPlatform}
+          activeReasons={activeReasons}
+          onReasonsChange={setActiveReasons}
+          isFiltering={isFiltering}
+          onClear={clearFilters}
+        />
+      )}
+
+      {filteredInspo.length === 0 && !showAdd ? (
+        isFiltering ? (
+          <FilterEmptyState onClear={clearFilters} />
+        ) : (
+          <EmptyState onClickAdd={() => setShowAdd(true)} />
+        )
       ) : (
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {inspo.map((i) => (
+          {filteredInspo.map((i) => (
             <InspoCardItem key={i.id} inspo={i} />
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+interface FilterBarProps {
+  searchInput: string;
+  onSearchChange: (v: string) => void;
+  currentPlatform: string;
+  onPlatformChange: (p: string) => void;
+  activeReasons: string[];
+  onReasonsChange: (r: string[]) => void;
+  isFiltering: boolean;
+  onClear: () => void;
+}
+
+function FilterBar({
+  searchInput,
+  onSearchChange,
+  currentPlatform,
+  onPlatformChange,
+  activeReasons,
+  onReasonsChange,
+  isFiltering,
+  onClear,
+}: FilterBarProps) {
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Search + platform row */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search by caption or creator…"
+            value={searchInput}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          {(["", "tiktok", "instagram"] as const).map((p) => (
+            <button
+              key={p || "all"}
+              type="button"
+              onClick={() => onPlatformChange(p)}
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                currentPlatform === p
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-transparent text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+              )}
+            >
+              {p === "" ? "All" : platformLabel(p)}
+            </button>
+          ))}
+          {isFiltering && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="ml-1 flex items-center gap-1 rounded-full border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+            >
+              <X className="size-3" />
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Save reason chips */}
+      <ChipPicker
+        options={[...SAVE_REASONS]}
+        values={activeReasons}
+        onChange={onReasonsChange}
+        multi
+        allowCustom={false}
+      />
     </div>
   );
 }
@@ -160,13 +307,32 @@ function EmptyState({ onClickAdd }: { onClickAdd: () => void }) {
       <div className="max-w-xs">
         <p className="font-medium">No inspo yet</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Save a TikTok or Instagram link to start building your content
-          inspo library.
+          Save a TikTok or Instagram link to start building your content inspo library.
         </p>
       </div>
       <Button variant="brand" size="lg" onClick={onClickAdd}>
         <Plus className="size-4" />
         Add your first inspo
+      </Button>
+    </div>
+  );
+}
+
+function FilterEmptyState({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border py-16 text-center">
+      <div className="inline-flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Search className="size-6" />
+      </div>
+      <div className="max-w-xs">
+        <p className="font-medium">No results</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          No inspo matches your current filters. Try adjusting or clearing them.
+        </p>
+      </div>
+      <Button variant="outline" onClick={onClear}>
+        <X className="size-4" />
+        Clear filters
       </Button>
     </div>
   );
@@ -200,17 +366,12 @@ function AddInspoPanel({
       const res = await fetch("/api/inspo", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          url: url.trim(),
-          save_reasons: reasons,
-        }),
+        body: JSON.stringify({ url: url.trim(), save_reasons: reasons }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error ?? "Couldn't save your inspo.");
       }
-      // The detail-page fetch will load all the missing fields. The card
-      // shown locally just needs enough to render placeholder.
       onSaved({
         id: json.data.inspo_id,
         platform: json.data.platform,
@@ -238,9 +399,7 @@ function AddInspoPanel({
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <p className="font-medium">Add inspo</p>
-          <p className="text-xs text-muted-foreground">
-            Paste a TikTok or Instagram link.
-          </p>
+          <p className="text-xs text-muted-foreground">Paste a TikTok or Instagram link.</p>
         </div>
         <button
           type="button"
@@ -267,9 +426,7 @@ function AddInspoPanel({
             <p
               className={cn(
                 "text-xs",
-                supportable === false
-                  ? "text-destructive"
-                  : "text-muted-foreground",
+                supportable === false ? "text-destructive" : "text-muted-foreground",
               )}
             >
               {supportable === false
@@ -280,7 +437,10 @@ function AddInspoPanel({
         </div>
 
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium">Why did you save this? <span className="font-normal text-muted-foreground">Optional</span></p>
+          <p className="text-sm font-medium">
+            Why did you save this?{" "}
+            <span className="font-normal text-muted-foreground">Optional</span>
+          </p>
           <ChipPicker
             options={SAVE_REASONS}
             values={reasons}
@@ -356,9 +516,7 @@ function InspoCardItem({ inspo }: { inspo: InspoCard }) {
           </div>
           <p className="text-sm line-clamp-2 min-h-[2.5em]">
             {inspo.caption || (
-              <span className="text-muted-foreground italic">
-                Caption pending…
-              </span>
+              <span className="text-muted-foreground italic">Caption pending…</span>
             )}
           </p>
           {inspo.save_reasons.length > 0 && (
