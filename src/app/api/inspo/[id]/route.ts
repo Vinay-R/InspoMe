@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api-errors";
 
 export async function GET(
   _request: NextRequest,
@@ -10,9 +11,7 @@ export async function GET(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return apiError("unauthorized");
 
   const [{ data: inspo }, { data: analysis }, { data: metrics }, { data: job }] =
     await Promise.all([
@@ -38,9 +37,7 @@ export async function GET(
         .maybeSingle(),
     ]);
 
-  if (!inspo) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  if (!inspo) return apiError("not_found");
 
   return NextResponse.json({
     success: true,
@@ -57,17 +54,13 @@ export async function DELETE(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return apiError("unauthorized");
 
   const { error } = await supabase
     .from("inspo")
     .update({ user_hidden: true })
     .eq("id", id);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return apiError("internal", { cause: error });
   return NextResponse.json({ success: true });
 }

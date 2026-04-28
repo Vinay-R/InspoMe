@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api-errors";
 
 const Schema = z.object({
   preferred_content: z.array(z.string().min(1).max(80)).max(8),
@@ -24,23 +25,20 @@ export async function POST(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return apiError("unauthorized");
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return apiError("invalid_input");
   }
 
   const parsed = Schema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid input", issues: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return apiError("invalid_input", {
+      devDetail: { issues: parsed.error.flatten() },
+    });
   }
   const v = parsed.data;
 
@@ -54,10 +52,7 @@ export async function POST(request: NextRequest) {
     v.pillars.length === 0 ||
     !v.experience_level
   ) {
-    return NextResponse.json(
-      { error: "Required fields missing" },
-      { status: 400 },
-    );
+    return apiError("invalid_input");
   }
 
   const { error } = await supabase
@@ -79,9 +74,7 @@ export async function POST(request: NextRequest) {
     })
     .eq("id", user.id);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return apiError("internal", { cause: error });
 
   return NextResponse.json({ success: true });
 }

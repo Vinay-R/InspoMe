@@ -3,6 +3,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { parseInspoUrl, isSupportedPlatform } from "@/lib/platform";
 import { getIngestionService } from "@/server/ingestion/service";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { apiError, rateLimitedResponse } from "@/lib/api-errors";
 
 const CreateSchema = z.object({
   url: z.string().min(1).max(2000),
@@ -21,37 +23,29 @@ export async function POST(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return apiError("unauthorized");
+
+  const rl = await checkRateLimit(user.id);
+  if (!rl.allowed) return rateLimitedResponse(rl.resetAt);
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return apiError("invalid_input");
   }
 
   const parsed = CreateSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid input", issues: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return apiError("invalid_input", {
+      devDetail: { issues: parsed.error.flatten() },
+    });
   }
 
   const { url, save_reasons, note } = parsed.data;
   const u = parseInspoUrl(url);
 
-  if (!isSupportedPlatform(u.platform)) {
-    return NextResponse.json(
-      {
-        error:
-          "Unsupported URL. We currently support TikTok and Instagram links.",
-      },
-      { status: 400 },
-    );
-  }
+  if (!isSupportedPlatform(u.platform)) return apiError("unsupported_url");
 
   // Save first — the spec invariant. Enrichment kicks off after.
   const { data: inspo, error } = await supabase
@@ -73,10 +67,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error || !inspo) {
-    return NextResponse.json(
-      { error: error?.message ?? "Could not save inspo." },
-      { status: 500 },
-    );
+    return apiError("save_failed", { cause: error });
   }
 
   try {
@@ -107,9 +98,7 @@ export async function GET(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return apiError("unauthorized");
 
   const url = new URL(request.url);
   const platform = url.searchParams.get("platform");
@@ -140,7 +129,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await query;
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return apiError("internal", { cause: error });
   }
 
   return NextResponse.json({ success: true, data: data ?? [] });

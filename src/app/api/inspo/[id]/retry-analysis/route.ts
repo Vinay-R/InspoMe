@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getIngestionService } from "@/server/ingestion/service";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { apiError, rateLimitedResponse } from "@/lib/api-errors";
 
 export async function POST(
   _request: NextRequest,
@@ -11,9 +13,10 @@ export async function POST(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return apiError("unauthorized");
+
+  const rl = await checkRateLimit(user.id);
+  if (!rl.allowed) return rateLimitedResponse(rl.resetAt);
 
   const { data: inspo } = await supabase
     .from("inspo")
@@ -21,16 +24,12 @@ export async function POST(
     .eq("id", id)
     .maybeSingle();
 
-  if (!inspo) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  if (!inspo) return apiError("not_found");
 
   // Defense-in-depth: RLS already filters this query to the session user's
   // rows, so reaching here with a mismatched user_id implies a misconfigured
   // policy. Fail closed instead of silently triggering work for another user.
-  if (inspo.user_id !== user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  if (inspo.user_id !== user.id) return apiError("forbidden");
 
   await supabase
     .from("inspo")

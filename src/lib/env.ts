@@ -51,4 +51,10 @@ export const serverEnv = {
     // alternate actor. Format: "username/actor-name".
     return process.env.APIFY_TIKTOK_ACTOR?.trim() || "clockworks/tiktok-scraper";
   },
+  get upstashRedisRestUrl(): string | null {
+    return process.env.UPSTASH_REDIS_REST_URL?.trim() || null;
+  },
+  get upstashRedisRestToken(): string | null {
+    return process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || null;
+  },
 };
