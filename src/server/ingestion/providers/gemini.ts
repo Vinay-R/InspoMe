@@ -4,9 +4,11 @@ import {
   GoogleGenAI,
   HarmBlockThreshold,
   HarmCategory,
-  createUserContent,
+  createPartFromBase64,
   createPartFromUri,
+  createUserContent,
 } from "@google/genai";
+import type { Part } from "@google/genai";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 import type {
@@ -18,16 +20,21 @@ import {
   AnalysisDataSchema,
   ANALYSIS_SCHEMA_VERSION,
 } from "../analysis-schema";
+import { serverEnv } from "@/lib/env";
 
 // Multimodal video analysis via Gemini 2.5 Flash.
 //
 // Pipeline:
 //   1. Fetch the media bytes from Cobalt's tunnel/redirect URL (short-lived).
-//   2. Upload to Gemini's Files API.
-//   3. Poll for ACTIVE state (videos require server-side processing first).
-//   4. Call generateContent with the video + a structured-output prompt.
-//   5. Validate the JSON response with our Zod schema.
-//   6. Cleanup the uploaded file (best-effort).
+//   2. Choose the upload path by file size:
+//      - <= 18MB → inline base64 in the request body. No upload, no polling.
+//      - >  18MB → Files API upload + poll for ACTIVE.
+//   3. Call generateContent with the video + a structured-output prompt.
+//   4. Validate the JSON response with our Zod schema.
+//   5. Cleanup the uploaded file when one was created (best-effort).
+//
+// Most short-form reels are 3-15MB, so the inline path is the typical case
+// and saves ~7-25s of upload + polling latency vs. always using Files API.
 //
 // Caption-injection defense: untrusted user content (captions, save reasons,
 // profile fields) lives in the *user* turn inside delimited blocks. The system
@@ -42,8 +49,13 @@ const PROMPT_VERSION = "v1";
 // 2GB free-tier limit. Cuts off pathological inputs (huge files = huge bills).
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
+// Files at or below this go inline (base64 in the request body), skipping the
+// Files API upload + polling. Gemini's per-request inline limit is 20MB; we
+// leave 2MB headroom for the prompt + JSON schema + protocol overhead.
+const INLINE_DATA_LIMIT_BYTES = 18 * 1024 * 1024;
+
 const FILE_PROCESSING_TIMEOUT_MS = 90_000;
-const FILE_POLL_INTERVAL_MS = 2_000;
+const FILE_POLL_INTERVAL_MS = 1_000;
 const MEDIA_FETCH_TIMEOUT_MS = 60_000;
 const GENERATE_TIMEOUT_MS = 180_000;
 
@@ -73,29 +85,33 @@ export class GeminiProvider implements VideoAnalysisProvider {
 
     const { buffer, mimeType } = await fetchVideoBytes(input.mediaFileUrl);
 
-    // Step 1: upload bytes to Gemini Files API.
-    const uploaded = await this.ai.files.upload({
-      file: new Blob([new Uint8Array(buffer)], { type: mimeType }),
-      config: { mimeType },
-    });
+    // Branch on size: inline base64 for typical reels (no upload, no polling),
+    // Files API only when the file is too large to inline.
+    let videoPart: Part;
+    let uploadedFileName: string | null = null;
 
-    if (!uploaded.name) {
-      throw new Error("Gemini upload returned no file name.");
+    if (buffer.byteLength <= INLINE_DATA_LIMIT_BYTES) {
+      videoPart = createPartFromBase64(buffer.toString("base64"), mimeType);
+    } else {
+      const uploaded = await this.ai.files.upload({
+        file: new Blob([new Uint8Array(buffer)], { type: mimeType }),
+        config: { mimeType },
+      });
+      if (!uploaded.name) {
+        throw new Error("Gemini upload returned no file name.");
+      }
+      uploadedFileName = uploaded.name;
+      const activeFile = await this.waitForActive(uploaded.name);
+      videoPart = createPartFromUri(activeFile.uri, activeFile.mimeType);
     }
 
-    let activeFile;
     try {
-      activeFile = await this.waitForActive(uploaded.name);
-
-      // Step 2: generate analysis with structured output + safety settings
-      // tuned for creator content (default safety triggers false positives on
-      // ordinary TikTok/IG audio).
+      // Generate analysis with structured output + safety settings tuned for
+      // creator content (default safety triggers false positives on ordinary
+      // TikTok/IG audio).
       const response = await this.ai.models.generateContent({
         model: MODEL,
-        contents: createUserContent([
-          createPartFromUri(activeFile.uri, activeFile.mimeType),
-          buildUserPrompt(input),
-        ]),
+        contents: createUserContent([videoPart, buildUserPrompt(input)]),
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
           responseMimeType: "application/json",
@@ -112,20 +128,15 @@ export class GeminiProvider implements VideoAnalysisProvider {
         },
       });
 
-      // Step 3: parse + Zod-validate. Throw on schema mismatch — `service.ts`
-      // catches and marks the analysis as failed so the user sees a clear
-      // error state and can retry.
+      // Parse + Zod-validate. Throw on schema mismatch — `service.ts` catches
+      // and marks the analysis as failed so the user sees a clear error state
+      // and can retry.
       const text = response.text;
       if (!text) {
         throw new Error("Gemini returned an empty response.");
       }
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        throw new Error("Gemini response was not valid JSON.");
-      }
+      const parsed = parseGeminiJson(text, response);
 
       const data = AnalysisDataSchema.parse(parsed);
 
@@ -137,12 +148,14 @@ export class GeminiProvider implements VideoAnalysisProvider {
         data,
       };
     } finally {
-      // Best-effort cleanup so we don't accumulate orphaned files toward
-      // Gemini's per-project storage cap. Failure here is non-fatal.
-      const name = activeFile?.name ?? uploaded.name;
-      this.ai.files.delete({ name }).catch((e) => {
-        console.warn("[gemini] file cleanup failed", name, e);
-      });
+      // Only cleanup if we actually uploaded a file (inline path leaves nothing
+      // server-side). Failure here is non-fatal.
+      if (uploadedFileName) {
+        const name = uploadedFileName;
+        this.ai.files.delete({ name }).catch((e) => {
+          console.warn("[gemini] file cleanup failed", name, e);
+        });
+      }
     }
   }
 
@@ -179,16 +192,61 @@ export class GeminiProvider implements VideoAnalysisProvider {
   }
 }
 
+function parseGeminiJson(text: string, response: unknown): unknown {
+  const candidates = [
+    text,
+    stripMarkdownJsonFence(text),
+    extractJsonObject(text),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Try the next normalized form.
+    }
+  }
+
+  console.error("[gemini] invalid JSON response", {
+    textLength: text.length,
+    finishReason: getFinishReason(response),
+    prefix: text.slice(0, 500),
+    suffix: text.slice(-500),
+  });
+  throw new Error("Gemini response was not valid JSON.");
+}
+
+function stripMarkdownJsonFence(text: string): string | null {
+  const match = text
+    .trim()
+    .match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match?.[1]?.trim() ?? null;
+}
+
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return text.slice(start, end + 1).trim();
+}
+
+function getFinishReason(response: unknown): string | undefined {
+  if (!response || typeof response !== "object") return undefined;
+  const candidates = "candidates" in response ? response.candidates : undefined;
+  if (!Array.isArray(candidates)) return undefined;
+  const first = candidates[0];
+  if (!first || typeof first !== "object") return undefined;
+  const finishReason = "finishReason" in first ? first.finishReason : undefined;
+  return typeof finishReason === "string" ? finishReason : undefined;
+}
+
 async function fetchVideoBytes(
   url: string,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(MEDIA_FETCH_TIMEOUT_MS),
-    // Send a real-looking UA — Instagram's CDN occasionally 403s default fetch.
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-    },
+    headers: buildMediaFetchHeaders(url),
   });
   if (!res.ok) {
     throw new Error(`Failed to fetch media: HTTP ${res.status}`);
@@ -208,6 +266,36 @@ async function fetchVideoBytes(
     buffer: Buffer.from(arrayBuffer),
     mimeType,
   };
+}
+
+function buildMediaFetchHeaders(url: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    // Send a real-looking UA — Instagram's CDN occasionally 403s default fetch.
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+  };
+
+  // Apify-hosted videos live in private Key-Value Store records by default.
+  // Keep the stored media URL token-free and authenticate only at fetch time.
+  if (isApifyKeyValueStoreRecord(url)) {
+    const token = serverEnv.apifyApiToken;
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
+function isApifyKeyValueStoreRecord(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return (
+      url.hostname === "api.apify.com" &&
+      url.pathname.startsWith("/v2/key-value-stores/") &&
+      url.pathname.includes("/records/")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function sleep(ms: number): Promise<void> {

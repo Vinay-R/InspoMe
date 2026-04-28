@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
-  ExternalLink,
   Loader2,
   RefreshCcw,
   AlertTriangle,
@@ -211,12 +210,18 @@ function MediaHeader({
   return (
     <Card className="overflow-hidden">
       <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-0">
-        <div className="relative aspect-[9/12] sm:aspect-auto bg-secondary">
+        <a
+          href={inspo.deep_link_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open original on ${platformLabel(inspo.platform)}`}
+          className="group relative block aspect-[9/12] sm:aspect-auto bg-secondary overflow-hidden"
+        >
           {inspo.thumbnail_url ? (
             <img
               src={inspo.thumbnail_url}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
           ) : (
             <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
@@ -225,7 +230,8 @@ function MediaHeader({
                 : "No thumbnail available"}
             </div>
           )}
-        </div>
+          <div className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/30" />
+        </a>
         <div className="flex flex-col gap-3 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{platformLabel(inspo.platform)}</Badge>
@@ -257,18 +263,6 @@ function MediaHeader({
           )}
 
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
-            <a
-              href={inspo.deep_link_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:underline underline-offset-4"
-            >
-              Open original
-              <ExternalLink className="size-3.5" />
-            </a>
-            <span className="text-muted-foreground" aria-hidden>
-              ·
-            </span>
             <button
               type="button"
               onClick={onRetry}

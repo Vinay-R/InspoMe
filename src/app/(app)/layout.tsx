@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Library, Settings, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function AppLayout({
   children,
@@ -31,6 +32,7 @@ export default async function AppLayout({
             <span className="font-semibold tracking-tight">InspoMe</span>
           </Link>
           <div className="flex items-center gap-1">
+            <ThemeToggle />
             <Link
               href="/settings"
               className="inline-flex size-10 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"

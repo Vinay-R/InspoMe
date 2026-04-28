@@ -4,14 +4,17 @@ import type {
   ContentIngestionService,
   IngestionInput,
   MediaDownloadProvider,
+  MediaDownloadResult,
   VideoAnalysisProvider,
 } from "./types";
+import { ApifyTikTokProvider } from "./providers/apify-tiktok";
 import { CobaltProvider } from "./providers/cobalt";
 import { GeminiProvider } from "./providers/gemini";
 import { StubCobaltProvider } from "./providers/stub-cobalt";
 import { StubGeminiProvider } from "./providers/stub-gemini";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { serverEnv } from "@/lib/env";
+import { parseInspoUrl } from "@/lib/platform";
 
 /**
  * Owns the lifecycle of a single ingestion job:
@@ -298,11 +301,49 @@ let cached: InlineIngestionService | null = null;
 // set, use the real provider; otherwise fall back to a stub. This keeps
 // `npm run dev` workable on a fresh clone without external services, while
 // production (env set in Vercel) automatically goes live.
-function selectDownloader(): MediaDownloadProvider {
-  if (serverEnv.cobaltApiUrl && serverEnv.cobaltApiKey) {
-    return new CobaltProvider();
+//
+// TikTok and Instagram have different reliability profiles, so we route by
+// platform: TikTok → Apify (Cobalt's datacenter IPs are blocked by TikTok),
+// Instagram → Cobalt. Both fall back to the stub when their credentials are
+// absent.
+class RoutingDownloadProvider implements MediaDownloadProvider {
+  readonly name = "routing";
+
+  constructor(
+    private readonly tiktok: MediaDownloadProvider,
+    private readonly instagram: MediaDownloadProvider,
+  ) {}
+
+  canHandle(url: string): boolean {
+    const platform = parseInspoUrl(url).platform;
+    return platform === "tiktok" || platform === "instagram";
   }
-  return new StubCobaltProvider();
+
+  async download(url: string): Promise<MediaDownloadResult> {
+    const parsed = parseInspoUrl(url);
+    if (parsed.platform === "tiktok") return this.tiktok.download(url);
+    if (parsed.platform === "instagram") return this.instagram.download(url);
+    return {
+      success: false,
+      platform: parsed.platform,
+      sourceUrl: url,
+      errorCode: "unsupported_platform",
+      errorMessage: "Only TikTok and Instagram URLs are supported.",
+    };
+  }
+}
+
+function selectDownloader(): MediaDownloadProvider {
+  const tiktok: MediaDownloadProvider = serverEnv.apifyApiToken
+    ? new ApifyTikTokProvider()
+    : new StubCobaltProvider();
+
+  const instagram: MediaDownloadProvider =
+    serverEnv.cobaltApiUrl && serverEnv.cobaltApiKey
+      ? new CobaltProvider()
+      : new StubCobaltProvider();
+
+  return new RoutingDownloadProvider(tiktok, instagram);
 }
 
 function selectAnalyzer(): VideoAnalysisProvider {

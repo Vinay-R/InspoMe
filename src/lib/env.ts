@@ -43,4 +43,12 @@ export const serverEnv = {
   get cobaltApiKey(): string | null {
     return process.env.COBALT_API_KEY ?? null;
   },
+  get apifyApiToken(): string | null {
+    return process.env.APIFY_API_TOKEN?.trim() || null;
+  },
+  get apifyTikTokActor(): string {
+    // Default to clockworks/tiktok-scraper. Override via env to swap in an
+    // alternate actor. Format: "username/actor-name".
+    return process.env.APIFY_TIKTOK_ACTOR?.trim() || "clockworks/tiktok-scraper";
+  },
 };
