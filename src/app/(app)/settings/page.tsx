@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { SettingsForm } from "./settings-form";
 
 export const metadata: Metadata = {
   title: "Settings — InspoMe",
@@ -14,7 +15,9 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   const { data: profile } = await supabase
     .from("users")
-    .select("*")
+    .select(
+      "preferred_content, niche, creator_category, creator_category_custom, content_goals, pillars, experience_level, tone",
+    )
     .eq("id", user!.id)
     .maybeSingle();
 
@@ -36,30 +39,25 @@ export default async function SettingsPage() {
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
-        <p className="text-sm font-medium">Your creator profile</p>
-        <dl className="mt-3 grid grid-cols-1 gap-y-3 text-sm">
-          <ProfileRow label="Category" value={profile?.creator_category ?? "—"} />
-          <ProfileRow label="Niche" value={(profile?.niche ?? []).join(", ") || "—"} />
-          <ProfileRow label="Goals" value={(profile?.content_goals ?? []).join(", ") || "—"} />
-          <ProfileRow label="Pillars" value={(profile?.pillars ?? []).join(", ") || "—"} />
-          <ProfileRow label="Formats" value={(profile?.preferred_content ?? []).join(", ") || "—"} />
-          <ProfileRow label="Experience" value={profile?.experience_level ?? "—"} />
-          <ProfileRow label="Tone" value={(profile?.tone ?? []).join(", ") || "—"} />
-        </dl>
-        <p className="mt-4 text-xs text-muted-foreground">
-          Editing onboarding fields is coming next — for now this is a snapshot of
-          what we use to personalize Gemini analysis.
-        </p>
+        <div className="mb-5">
+          <p className="text-sm font-medium">Creator profile</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Used to personalize how Gemini frames each analysis for you.
+          </p>
+        </div>
+        <SettingsForm
+          profile={{
+            preferred_content: profile?.preferred_content ?? [],
+            niche: profile?.niche ?? [],
+            creator_category: profile?.creator_category ?? null,
+            creator_category_custom: profile?.creator_category_custom ?? null,
+            content_goals: profile?.content_goals ?? [],
+            pillars: profile?.pillars ?? [],
+            experience_level: profile?.experience_level ?? null,
+            tone: profile?.tone ?? [],
+          }}
+        />
       </section>
-    </div>
-  );
-}
-
-function ProfileRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid grid-cols-3 gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="col-span-2">{value}</dd>
     </div>
   );
 }
