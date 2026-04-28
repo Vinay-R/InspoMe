@@ -1,5 +1,7 @@
 import "server-only";
 
+import { waitUntil } from "@vercel/functions";
+
 import type {
   ContentIngestionService,
   IngestionInput,
@@ -20,9 +22,10 @@ import { parseInspoUrl } from "@/lib/platform";
  * Owns the lifecycle of a single ingestion job:
  *   inspo → download → analyze → persist → update inspo statuses
  *
- * Currently runs the work inline via queueMicrotask so we don't need a real
- * queue. The next pass moves this to Vercel's `waitUntil` (or a real queue)
- * so cold-starts don't terminate the function before analysis completes.
+ * Runs the work inline within the request's lifetime via Vercel's `waitUntil`,
+ * which extends the serverless function past the response so the analyze step
+ * isn't killed by cold-start function termination. Locally `waitUntil` simply
+ * resolves the promise normally, so dev behavior is unchanged.
  */
 export class InlineIngestionService implements ContentIngestionService {
   constructor(
@@ -59,12 +62,13 @@ export class InlineIngestionService implements ContentIngestionService {
       })
       .eq("id", input.inspoId);
 
-    // Fire-and-forget. In Phase 1 this runs in the same process.
-    queueMicrotask(() => {
-      void this.run(job.id, input).catch((e) => {
+    // Fire-and-forget the analyze step. `waitUntil` keeps the serverless
+    // function alive past the response so the work isn't killed mid-flight.
+    waitUntil(
+      this.run(job.id, input).catch((e) => {
         console.error("[ingestion] unhandled error", e);
-      });
-    });
+      }),
+    );
 
     return { jobId: job.id, status: "queued" };
   }
