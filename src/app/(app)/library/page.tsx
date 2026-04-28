@@ -8,17 +8,12 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-function postgrestQuoteValue(v: string): string {
-  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ welcome?: string; q?: string; platform?: string }>;
+  searchParams: Promise<{ welcome?: string; platform?: string }>;
 }) {
   const params = await searchParams;
-  const q = params.q?.trim() ?? "";
   const platform = params.platform ?? "";
   const welcome = params.welcome === "1";
 
@@ -41,20 +36,13 @@ export default async function LibraryPage({
     query = query.eq("platform", platform);
   }
 
-  if (q) {
-    const ilikeTerm = `%${q.replace(/[%_]/g, "\\$&")}%`;
-    const safe = postgrestQuoteValue(ilikeTerm);
-    query = query.or(`caption.ilike.${safe},creator_handle.ilike.${safe}`);
-  }
-
   const { data: inspoRows } = await query;
 
   return (
     <LibraryView
-      key={`${q}|${platform}`}
+      key={platform}
       initialInspo={inspoRows ?? []}
       welcome={welcome}
-      initialQ={q}
     />
   );
 }

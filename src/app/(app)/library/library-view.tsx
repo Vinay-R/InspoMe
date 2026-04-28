@@ -42,43 +42,21 @@ type InspoCard = {
 interface Props {
   initialInspo: InspoCard[];
   welcome: boolean;
-  initialQ: string;
 }
 
-export function LibraryView({ initialInspo, welcome, initialQ }: Props) {
+export function LibraryView({ initialInspo, welcome }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentQ = searchParams.get("q") ?? "";
   const currentPlatform = searchParams.get("platform") ?? "";
 
   const [inspo, setInspo] = React.useState<InspoCard[]>(initialInspo);
-
   const [showAdd, setShowAdd] = React.useState(initialInspo.length === 0 && welcome);
   const [showWelcome, setShowWelcome] = React.useState(welcome);
-  const [searchInput, setSearchInput] = React.useState(initialQ);
+  const [searchInput, setSearchInput] = React.useState("");
   const [activeReasons, setActiveReasons] = React.useState<string[]>([]);
-
-  // Debounced search → update URL (skip on mount to avoid spurious navigation).
-  const isFirstSearchRender = React.useRef(true);
-  React.useEffect(() => {
-    if (isFirstSearchRender.current) {
-      isFirstSearchRender.current = false;
-      return;
-    }
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams();
-      if (searchInput.trim()) params.set("q", searchInput.trim());
-      if (currentPlatform) params.set("platform", currentPlatform);
-      const qs = params.toString();
-      router.replace(qs ? `?${qs}` : "?", { scroll: false });
-    }, 350);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput]);
 
   function setPlatform(p: string) {
     const params = new URLSearchParams();
-    if (currentQ) params.set("q", currentQ);
     if (p) params.set("platform", p);
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
@@ -99,7 +77,6 @@ export function LibraryView({ initialInspo, welcome, initialQ }: Props) {
     const interval = setInterval(async () => {
       try {
         const params = new URLSearchParams();
-        if (currentQ) params.set("search", currentQ);
         if (currentPlatform) params.set("platform", currentPlatform);
         const qs = params.toString();
         const res = await fetch(qs ? `/api/inspo?${qs}` : "/api/inspo", {
@@ -113,15 +90,23 @@ export function LibraryView({ initialInspo, welcome, initialQ }: Props) {
       }
     }, 2500);
     return () => clearInterval(interval);
-  }, [inspo, currentQ, currentPlatform]);
+  }, [inspo, currentPlatform]);
 
-  // Client-side save-reason filter applied on top of server-filtered results.
-  const filteredInspo =
-    activeReasons.length === 0
-      ? inspo
-      : inspo.filter((i) => activeReasons.every((r) => i.save_reasons.includes(r)));
+  // All filtering is client-side: instant text match + reason intersection.
+  const term = searchInput.trim().toLowerCase();
+  const filteredInspo = inspo.filter((i) => {
+    if (term) {
+      const inCaption = i.caption?.toLowerCase().includes(term) ?? false;
+      const inHandle = i.creator_handle?.toLowerCase().includes(term) ?? false;
+      if (!inCaption && !inHandle) return false;
+    }
+    if (activeReasons.length > 0) {
+      if (!activeReasons.every((r) => i.save_reasons.includes(r))) return false;
+    }
+    return true;
+  });
 
-  const isFiltering = currentQ !== "" || currentPlatform !== "" || activeReasons.length > 0;
+  const isFiltering = searchInput !== "" || currentPlatform !== "" || activeReasons.length > 0;
 
   return (
     <div className="flex flex-1 flex-col gap-5">
