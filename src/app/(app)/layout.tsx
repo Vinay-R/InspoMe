@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Library, Settings, LogOut } from "lucide-react";
+import { Settings, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BottomNav, HeaderTabs } from "@/components/app-nav";
 
 export default async function AppLayout({
   children,
@@ -31,6 +32,7 @@ export default async function AppLayout({
             <span className="inline-block size-6 rounded-md bg-brand" />
             <span className="font-semibold tracking-tight">InspoMe</span>
           </Link>
+          <HeaderTabs />
           <div className="flex items-center gap-1">
             <ThemeToggle />
             <Link
@@ -57,18 +59,7 @@ export default async function AppLayout({
         {children}
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 backdrop-blur md:hidden"
-           style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}>
-        <div className="mx-auto grid max-w-3xl grid-cols-1 px-5 pt-2">
-          <Link
-            href="/library"
-            className="flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 text-foreground"
-          >
-            <Library className="size-6" />
-            <span className="text-[11px] font-medium">Library</span>
-          </Link>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

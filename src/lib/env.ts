@@ -57,4 +57,23 @@ export const serverEnv = {
   get upstashRedisRestToken(): string | null {
     return process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || null;
   },
+  // ── Analytics OAuth (deferred, currently unused by UI) ──
+  get metaAppId(): string | null {
+    return process.env.META_APP_ID?.trim() || null;
+  },
+  get metaAppSecret(): string | null {
+    return process.env.META_APP_SECRET?.trim() || null;
+  },
+  get tiktokClientKey(): string | null {
+    return process.env.TIKTOK_CLIENT_KEY?.trim() || null;
+  },
+  get tiktokClientSecret(): string | null {
+    return process.env.TIKTOK_CLIENT_SECRET?.trim() || null;
+  },
+  // Default-on until real OAuth ships. Set ANALYTICS_MOCK_MODE=false in
+  // production once at least one real provider is wired.
+  get analyticsMockMode(): boolean {
+    const v = process.env.ANALYTICS_MOCK_MODE?.trim().toLowerCase();
+    return v !== "false" && v !== "0";
+  },
 };

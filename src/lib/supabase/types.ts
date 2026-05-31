@@ -242,3 +242,102 @@ export type IngestionJobRow = {
   completed_at: string | null;
   created_at: string;
 };
+
+// ────────────────────────────────────────────────────────────────────
+// Analytics types
+// ────────────────────────────────────────────────────────────────────
+
+export type ConnectionStatus =
+  | "connected"
+  | "needs_reauth"
+  | "syncing"
+  | "disconnected";
+
+export type CreatorPostMediaType = "video" | "image" | "carousel";
+
+export type ConnectedAccountRow = {
+  id: string;
+  user_id: string;
+  platform: "tiktok" | "instagram";
+  platform_user_id: string | null;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  access_token_encrypted: string | null;
+  refresh_token_encrypted: string | null;
+  token_expires_at: string | null;
+  scopes: string[];
+  connection_status: ConnectionStatus;
+  is_mock: boolean;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreatorPostRow = {
+  id: string;
+  user_id: string;
+  connected_account_id: string;
+  platform: "tiktok" | "instagram";
+  platform_post_id: string;
+  url: string | null;
+  thumbnail_url: string | null;
+  caption: string | null;
+  media_type: CreatorPostMediaType;
+  posted_at: string | null;
+  duration_seconds: number | null;
+  format_tag: string | null;
+  pillar_tag: string | null;
+  topic_tags: string[];
+  hook_strength: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PostMetricSnapshotRow = {
+  id: string;
+  user_id: string;
+  creator_post_id: string;
+  captured_at: string;
+  views: number | null;
+  reach: number | null;
+  impressions: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  follows: number | null;
+  profile_visits: number | null;
+  average_watch_time: number | null;
+  completion_rate: number | null;
+  engagement_rate: number | null;
+  share_rate: number | null;
+  save_rate: number | null;
+  raw_metrics: Record<string, unknown>;
+  source:
+    | "official_api"
+    | "permissioned_user_connection"
+    | "research_api"
+    | "embed_metadata"
+    | "manual"
+    | "unavailable";
+  confidence: "high" | "medium" | "low" | "unknown";
+  created_at: string;
+};
+
+export type AnalyticsInsightRow = {
+  id: string;
+  user_id: string;
+  insight_type: string;
+  title: string;
+  observation: string;
+  explanation: string;
+  recommended_action: string | null;
+  confidence: "high" | "medium" | "low" | "unknown";
+  related_post_ids: string[];
+  time_window_days: number;
+  generated_at: string;
+  expires_at: string | null;
+  created_at: string;
+};

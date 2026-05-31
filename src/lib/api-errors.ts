@@ -11,6 +11,9 @@ const USER_MESSAGES: Record<string, string> = {
   rate_limited: "You've saved too many items recently. Try again in an hour.",
   save_failed: "We couldn't save that right now. Please try again.",
   enqueue_failed: "Saved, but analysis couldn't start. Use the retry button.",
+  account_not_connected: "That account isn't connected yet.",
+  sync_in_progress: "We're already syncing this account. Hang tight.",
+  provider_unavailable: "That platform isn't available to sync right now.",
   internal: "Something went wrong on our end. Please try again.",
 };
 
@@ -32,6 +35,9 @@ const STATUS_MAP: Partial<Record<ErrorCode, number>> = {
   invalid_input: 400,
   unsupported_url: 400,
   rate_limited: 429,
+  account_not_connected: 404,
+  sync_in_progress: 409,
+  provider_unavailable: 503,
 };
 
 function httpStatus(code: ErrorCode): number {
