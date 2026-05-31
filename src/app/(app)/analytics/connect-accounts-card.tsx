@@ -46,7 +46,13 @@ export function ConnectAccountsCard({ accounts, onAccountsUpdate, compact }: Pro
         }
         return;
       }
-      // Refresh accounts via the status endpoint
+      // Real OAuth → bounce to the authorize URL. The callback handles the
+      // upsert + initial sync and redirects back to /analytics.
+      if (json.data?.authorize_url) {
+        window.location.href = json.data.authorize_url;
+        return;
+      }
+      // Stub path — refresh the account list so the new mock row appears.
       const sres = await fetch("/api/analytics/status", { cache: "no-store" });
       const sjson = await sres.json();
       if (Array.isArray(sjson.data)) onAccountsUpdate?.(sjson.data);

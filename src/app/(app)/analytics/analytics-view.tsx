@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Sparkles, RefreshCw, Lock } from "lucide-react";
+import { Sparkles, RefreshCw, Lock, AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
@@ -153,10 +153,22 @@ export function AnalyticsView({
     });
   }
 
+  const igError = searchParams.get("ig_error");
+  const igConnected = searchParams.get("ig_connected");
+
+  function clearOAuthParams() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("ig_error");
+    params.delete("ig_connected");
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : "?", { scroll: false });
+  }
+
   if (!isAnyConnected) {
     return (
       <div className="flex flex-1 flex-col gap-5">
         <Header />
+        {igError && <ErrorBanner code={igError} onDismiss={clearOAuthParams} />}
         <ConnectAccountsCard accounts={[]} onAccountsUpdate={setAccounts} />
         <EmptyHero />
       </div>
@@ -195,6 +207,13 @@ export function AnalyticsView({
         }
       />
 
+      {igError && <ErrorBanner code={igError} onDismiss={clearOAuthParams} />}
+      {igConnected && (
+        <SuccessBanner
+          message="Instagram connected. Pulling your latest posts…"
+          onDismiss={clearOAuthParams}
+        />
+      )}
       {isMock && <MockBanner />}
 
       <ConnectAccountsCard accounts={accounts} onAccountsUpdate={setAccounts} compact />
@@ -260,6 +279,58 @@ function MockBanner() {
           synthetic posts so you can preview the experience.
         </span>
       </p>
+    </div>
+  );
+}
+
+const IG_ERROR_COPY: Record<string, string> = {
+  missing_code: "Instagram didn't return an authorization code. Please try again.",
+  state_mismatch: "The connection request didn't match — try connecting again from this tab.",
+  token_exchange_failed: "Instagram rejected the authorization. Double-check your Meta app's redirect URI and that you're added as a test user.",
+  long_lived_exchange_failed: "We couldn't extend the short-lived token. Try connecting again.",
+  persist_failed: "We couldn't save the connection. Try again in a moment.",
+  unauthorized: "Sign in again and re-try connecting.",
+  provider_unavailable: "Instagram isn't configured on this deployment yet.",
+  network: "We couldn't reach Instagram. Try again in a moment.",
+};
+
+function ErrorBanner({ code, onDismiss }: { code: string; onDismiss: () => void }) {
+  const msg = IG_ERROR_COPY[code] ?? `Connection failed (${code}).`;
+  return (
+    <div className="relative flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 pr-10 text-sm">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+      <p className="text-foreground">{msg}</p>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function SuccessBanner({
+  message,
+  onDismiss,
+}: {
+  message: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="relative flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 pr-10 text-sm">
+      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      <p className="text-foreground">{message}</p>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+      >
+        <X className="size-3.5" />
+      </button>
     </div>
   );
 }

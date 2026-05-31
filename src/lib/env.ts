@@ -57,21 +57,43 @@ export const serverEnv = {
   get upstashRedisRestToken(): string | null {
     return process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || null;
   },
-  // ── Analytics OAuth (deferred, currently unused by UI) ──
+  // ── Instagram OAuth (Instagram API with Instagram Login) ──
   get metaAppId(): string | null {
     return process.env.META_APP_ID?.trim() || null;
   },
   get metaAppSecret(): string | null {
     return process.env.META_APP_SECRET?.trim() || null;
   },
+  /**
+   * Public origin of the app. Required when META_APP_ID is set so we can
+   * build the redirect URI. Falls back to a Vercel-provided URL in prod or
+   * localhost in dev.
+   */
+  get publicOrigin(): string {
+    const v = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (v) return v.replace(/\/$/, "");
+    const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+    if (vercel) return `https://${vercel}`;
+    const vercelAny = process.env.VERCEL_URL?.trim();
+    if (vercelAny) return `https://${vercelAny}`;
+    return "http://localhost:3000";
+  },
+  get instagramRedirectUri(): string {
+    return `${serverEnv.publicOrigin}/api/auth/instagram/callback`;
+  },
+  // ── TikTok OAuth (deferred, currently stub-only) ──
   get tiktokClientKey(): string | null {
     return process.env.TIKTOK_CLIENT_KEY?.trim() || null;
   },
   get tiktokClientSecret(): string | null {
     return process.env.TIKTOK_CLIENT_SECRET?.trim() || null;
   },
-  // Default-on until real OAuth ships. Set ANALYTICS_MOCK_MODE=false in
-  // production once at least one real provider is wired.
+  // While true, all analytics providers use synthetic data. Setting it to
+  // false alone doesn't enable real providers — they also need their own
+  // credentials. So the precedence is:
+  //   ANALYTICS_MOCK_MODE=false AND META_* present → real Instagram
+  //   ANALYTICS_MOCK_MODE=false AND TIKTOK_* present → real TikTok
+  //   anything else → stub
   get analyticsMockMode(): boolean {
     const v = process.env.ANALYTICS_MOCK_MODE?.trim().toLowerCase();
     return v !== "false" && v !== "0";

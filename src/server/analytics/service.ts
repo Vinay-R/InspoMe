@@ -12,22 +12,34 @@ import { TikTokDisplayProvider } from "./providers/tiktok-display";
 
 let cached: AnalyticsService | null = null;
 
+interface ProviderPair {
+  real: AnalyticsProvider;
+  stub: AnalyticsProvider;
+}
+
 /**
  * Owns the lifecycle of an analytics sync:
  *   connected_account → provider.syncAccount() → upsert posts + snapshots
  *     → bump connection_status + last_synced_at
  *
- * Provider selection mirrors the ingestion service: env presence picks real
- * vs stub. While ANALYTICS_MOCK_MODE is on (default), all syncs use stubs and
- * `connected_accounts.is_mock = true` so the UI can label the data honestly.
+ * Provider routing is per-account: rows flagged `is_mock=true` always sync
+ * via the stub (even if real OAuth creds are present), and real OAuth rows
+ * sync via the real provider. This lets you preview demo data without
+ * disconnecting a real account.
  */
 export class AnalyticsService {
   constructor(
-    private readonly providers: Record<AnalyticsPlatform, AnalyticsProvider>,
+    private readonly providers: Record<AnalyticsPlatform, ProviderPair>,
   ) {}
 
-  getProvider(platform: AnalyticsPlatform): AnalyticsProvider {
-    return this.providers[platform];
+  /** Returns the provider that *would* be used for a brand-new connection. */
+  realProviderFor(platform: AnalyticsPlatform): AnalyticsProvider {
+    return this.providers[platform].real;
+  }
+
+  /** Whether the platform has real OAuth wired and credentials in place. */
+  canConnectReal(platform: AnalyticsPlatform): boolean {
+    return this.providers[platform].real.canConnect;
   }
 
   async syncAndPersist(account: ConnectedAccountRow): Promise<{
@@ -35,7 +47,8 @@ export class AnalyticsService {
     snapshotCount: number;
     syncedAt: string;
   }> {
-    const provider = this.providers[account.platform];
+    const pair = this.providers[account.platform];
+    const provider = account.is_mock ? pair.stub : pair.real;
     const admin = createAdminClient();
 
     await admin
@@ -165,23 +178,15 @@ export class AnalyticsService {
   }
 }
 
-function selectInstagram(): AnalyticsProvider {
-  if (
-    !serverEnv.analyticsMockMode &&
-    serverEnv.metaAppId &&
-    serverEnv.metaAppSecret
-  ) {
+function instagramReal(): AnalyticsProvider {
+  if (serverEnv.metaAppId && serverEnv.metaAppSecret) {
     return new MetaInstagramProvider();
   }
   return new StubInstagramProvider();
 }
 
-function selectTikTok(): AnalyticsProvider {
-  if (
-    !serverEnv.analyticsMockMode &&
-    serverEnv.tiktokClientKey &&
-    serverEnv.tiktokClientSecret
-  ) {
+function tiktokReal(): AnalyticsProvider {
+  if (serverEnv.tiktokClientKey && serverEnv.tiktokClientSecret) {
     return new TikTokDisplayProvider();
   }
   return new StubTikTokProvider();
@@ -190,8 +195,8 @@ function selectTikTok(): AnalyticsProvider {
 export function getAnalyticsService(): AnalyticsService {
   if (!cached) {
     cached = new AnalyticsService({
-      instagram: selectInstagram(),
-      tiktok: selectTikTok(),
+      instagram: { real: instagramReal(), stub: new StubInstagramProvider() },
+      tiktok: { real: tiktokReal(), stub: new StubTikTokProvider() },
     });
   }
   return cached;

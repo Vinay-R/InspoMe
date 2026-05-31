@@ -6,16 +6,19 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError, rateLimitedResponse } from "@/lib/api-errors";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { getAnalyticsService, isMockAnalyticsMode } from "@/server/analytics/service";
+import { getAnalyticsService } from "@/server/analytics/service";
 
 const Schema = z.object({
   platform: z.enum(["instagram", "tiktok"]),
 });
 
 /**
- * In mock mode this creates a stub-flagged connected_account row and kicks
- * off an immediate sync. When real OAuth ships, this route returns an
- * authorize URL instead and the callback route does the upsert.
+ * Connect flow:
+ *  - If the real provider for the platform can connect (OAuth creds present),
+ *    return an authorize_url. The client redirects there and the OAuth
+ *    callback route handles the upsert + initial sync.
+ *  - Otherwise we create a stub-flagged connected_account and kick off a
+ *    synthetic sync so the user can preview the experience.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -39,11 +42,17 @@ export async function POST(request: NextRequest) {
   }
   const { platform } = parsed.data;
 
-  if (!isMockAnalyticsMode()) {
-    // Real OAuth not yet wired — see meta-instagram.ts / tiktok-display.ts.
-    return apiError("provider_unavailable");
+  const service = getAnalyticsService();
+  if (service.canConnectReal(platform)) {
+    const authorize_url =
+      platform === "instagram" ? "/api/auth/instagram" : "/api/auth/tiktok";
+    return NextResponse.json({
+      success: true,
+      data: { platform, authorize_url, is_mock: false },
+    });
   }
 
+  // Stub path — create a demo account and sync mock data inline.
   const admin = createAdminClient();
   const { data: account, error } = await admin
     .from("connected_accounts")
@@ -67,9 +76,8 @@ export async function POST(request: NextRequest) {
     return apiError("internal", { cause: error });
   }
 
-  // Fire-and-forget the sync so the response returns fast and the UI can poll.
   waitUntil(
-    getAnalyticsService()
+    service
       .syncAndPersist(account)
       .catch((e) => console.error("[analytics/connect] sync failed", e)),
   );
