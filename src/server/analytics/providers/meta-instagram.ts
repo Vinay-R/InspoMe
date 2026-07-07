@@ -175,11 +175,30 @@ export class MetaInstagramProvider implements AnalyticsProvider {
   }
 }
 
+/**
+ * Thrown when Instagram rejects our credentials (expired/revoked token).
+ * The sync service uses this to distinguish "user must reconnect" from
+ * transient failures that should NOT flip the account to needs_reauth.
+ */
+export class InstagramAuthError extends Error {}
+
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
+  // One hung Graph call inside the concurrency pool would stall the whole
+  // sync until the function is killed — always bound it.
+  const res = await fetch(url, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Instagram API ${res.status}: ${text.slice(0, 300)}`);
+    // OAuthException code 190 = invalid/expired token; 401/403 likewise.
+    const isAuth =
+      res.status === 401 ||
+      res.status === 403 ||
+      text.includes("OAuthException") ||
+      text.includes('"code":190');
+    const message = `Instagram API ${res.status}: ${text.slice(0, 300)}`;
+    throw isAuth ? new InstagramAuthError(message) : new Error(message);
   }
   return (await res.json()) as T;
 }

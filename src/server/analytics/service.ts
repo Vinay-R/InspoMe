@@ -2,13 +2,23 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { serverEnv } from "@/lib/env";
+import { decryptToken, encryptToken } from "@/lib/crypto";
 import type { ConnectedAccountRow } from "@/lib/supabase/types";
 
 import type { AnalyticsPlatform, AnalyticsProvider, SyncResult } from "./types";
 import { StubInstagramProvider } from "./providers/stub-instagram";
 import { StubTikTokProvider } from "./providers/stub-tiktok";
-import { MetaInstagramProvider } from "./providers/meta-instagram";
+import {
+  MetaInstagramProvider,
+  InstagramAuthError,
+} from "./providers/meta-instagram";
 import { TikTokDisplayProvider } from "./providers/tiktok-display";
+
+// Refresh IG long-lived tokens (60-day expiry) when a sync runs within this
+// window of expiry. IG requires the token to be ≥24h old and still valid, so
+// refreshing opportunistically on sync is the reliable path — every synced
+// account gets refreshed long before the cliff.
+const TOKEN_REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 let cached: AnalyticsService | null = null;
 
@@ -56,16 +66,29 @@ export class AnalyticsService {
       .update({ connection_status: "syncing" })
       .eq("id", account.id);
 
+    const syncAccount = await this.maybeRefreshInstagramToken(account, admin);
+
     let result: SyncResult;
     try {
-      result = await provider.syncAccount(account);
+      result = await provider.syncAccount(syncAccount);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Sync failed.";
+      // Only credential failures should demand a reconnect. Transient errors
+      // (network, IG blip) go back to `connected` with a retryable message —
+      // flipping to needs_reauth on every exception trained users to re-OAuth
+      // for no reason.
+      const isAuth = e instanceof InstagramAuthError;
+      console.error(
+        "[analytics] sync failed",
+        { accountId: account.id, platform: account.platform, isAuth },
+        e,
+      );
       await admin
         .from("connected_accounts")
         .update({
-          connection_status: "needs_reauth",
-          last_sync_error: msg,
+          connection_status: isAuth ? "needs_reauth" : "connected",
+          last_sync_error: isAuth
+            ? "Instagram session expired. Reconnect your account."
+            : "Sync failed. Please try again shortly.",
         })
         .eq("id", account.id);
       throw e;
@@ -106,11 +129,17 @@ export class AnalyticsService {
       .select("id, platform_post_id");
 
     if (upErr) {
+      // A Postgres failure is ours, not the user's — never demand a reconnect
+      // for it, and never surface raw database text.
+      console.error("[analytics] creator_posts upsert failed", {
+        accountId: account.id,
+        error: upErr,
+      });
       await admin
         .from("connected_accounts")
         .update({
-          connection_status: "needs_reauth",
-          last_sync_error: upErr.message,
+          connection_status: "connected",
+          last_sync_error: "Sync failed while saving posts. Please try again.",
         })
         .eq("id", account.id);
       throw new Error(upErr.message);
@@ -175,6 +204,68 @@ export class AnalyticsService {
       snapshotCount: metricRows.length,
       syncedAt,
     };
+  }
+
+  /**
+   * IG long-lived tokens expire after 60 days; refresh when a sync runs
+   * inside the window. Returns the account row to sync with (with the fresh
+   * token when refreshed). Refresh failures are non-fatal: the current token
+   * may still be valid, and if it isn't the sync fails as an auth error and
+   * flips the account to needs_reauth anyway.
+   */
+  private async maybeRefreshInstagramToken(
+    account: ConnectedAccountRow,
+    admin: ReturnType<typeof createAdminClient>,
+  ): Promise<ConnectedAccountRow> {
+    if (
+      account.is_mock ||
+      account.platform !== "instagram" ||
+      !account.access_token_encrypted ||
+      !account.token_expires_at ||
+      new Date(account.token_expires_at).getTime() - Date.now() >
+        TOKEN_REFRESH_WINDOW_MS
+    ) {
+      return account;
+    }
+
+    try {
+      const current = decryptToken(account.access_token_encrypted);
+      const res = await fetch(
+        `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${current}`,
+        { cache: "no-store", signal: AbortSignal.timeout(15_000) },
+      );
+      if (!res.ok) {
+        throw new Error(`refresh_access_token ${res.status}`);
+      }
+      const body = (await res.json()) as {
+        access_token: string;
+        expires_in: number;
+      };
+      const encrypted = encryptToken(body.access_token);
+      const expiresAt = new Date(
+        Date.now() + body.expires_in * 1000,
+      ).toISOString();
+
+      const { error } = await admin
+        .from("connected_accounts")
+        .update({
+          access_token_encrypted: encrypted,
+          token_expires_at: expiresAt,
+        })
+        .eq("id", account.id);
+      if (error) throw new Error(error.message);
+
+      return {
+        ...account,
+        access_token_encrypted: encrypted,
+        token_expires_at: expiresAt,
+      };
+    } catch (e) {
+      console.error("[analytics] IG token refresh failed — syncing with current token", {
+        accountId: account.id,
+      }, e);
+      return account;
+    }
   }
 }
 

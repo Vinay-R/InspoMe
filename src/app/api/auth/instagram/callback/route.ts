@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body,
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
     });
     const res = await fetch(
       `https://graph.instagram.com/access_token?${params.toString()}`,
-      { cache: "no-store" },
+      { cache: "no-store", signal: AbortSignal.timeout(15_000) },
     );
     if (!res.ok) {
       const text = await res.text();
@@ -120,7 +121,9 @@ export async function GET(request: NextRequest) {
       fields: "id,username,account_type",
       access_token: longLived.access_token,
     });
-    const res = await fetch(`https://graph.instagram.com/me?${params.toString()}`);
+    const res = await fetch(`https://graph.instagram.com/me?${params.toString()}`, {
+      signal: AbortSignal.timeout(15_000),
+    });
     if (res.ok) profile = await res.json();
   } catch {
     // non-fatal — we already have the user id
