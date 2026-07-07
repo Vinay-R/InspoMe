@@ -74,28 +74,35 @@ const STEPS: ReadonlyArray<{
     title: "About you",
     subtitle: "Step 3 of 7",
     prompt: "How would you best describe yourself?",
-    helper: "We'll frame insights to match.",
+    helper: "We'll frame insights to match. Optional — you can skip this.",
+    skippable: true,
   },
   {
     key: "goals",
     title: "Your goals",
     subtitle: "Step 4 of 7",
     prompt: "What are your content goals?",
-    helper: "We'll highlight content patterns that match your goals.",
+    helper:
+      "We'll highlight content patterns that match your goals. Optional — you can skip this.",
+    skippable: true,
   },
   {
     key: "pillars",
     title: "Your content pillars",
     subtitle: "Step 5 of 7",
     prompt: "What are your content pillars?",
-    helper: "The themes you keep coming back to.",
+    helper:
+      "The themes you keep coming back to. Optional — you can skip this.",
+    skippable: true,
   },
   {
     key: "experience",
     title: "Your experience",
     subtitle: "Step 6 of 7",
     prompt: "How comfortable are you creating content?",
-    helper: "We'll adjust how deep our analysis goes.",
+    helper:
+      "We'll adjust how deep our analysis goes. Optional — you can skip this.",
+    skippable: true,
   },
   {
     key: "tone",
@@ -107,13 +114,70 @@ const STEPS: ReadonlyArray<{
   },
 ];
 
+const DRAFT_KEY = "inspome:onboarding-draft";
+
+interface Draft {
+  state: State;
+  stepIndex: number;
+}
+
+function loadDraft(): Draft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const candidate = parsed as { state?: unknown; stepIndex?: unknown };
+    if (
+      typeof candidate.stepIndex !== "number" ||
+      typeof candidate.state !== "object" ||
+      candidate.state === null
+    ) {
+      return null;
+    }
+    return {
+      state: { ...INITIAL, ...(candidate.state as Partial<State>) },
+      stepIndex: Math.min(
+        Math.max(0, Math.trunc(candidate.stepIndex)),
+        STEPS.length - 1,
+      ),
+    };
+  } catch {
+    // Malformed JSON or storage unavailable — start fresh.
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    window.localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
 export function OnboardingFlow() {
   const router = useRouter();
-  const [stepIndex, setStepIndex] = React.useState(0);
-  const [state, setState] = React.useState<State>(INITIAL);
+  const [draft] = React.useState(loadDraft);
+  const [stepIndex, setStepIndex] = React.useState(draft?.stepIndex ?? 0);
+  const [state, setState] = React.useState<State>(draft?.state ?? INITIAL);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [showGoalToast, setShowGoalToast] = React.useState(false);
+
+  // Cheap abandonment persistence: mirror progress to localStorage so a
+  // closed tab resumes where the user left off.
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ state, stepIndex }),
+      );
+    } catch {
+      // Storage full/unavailable — persistence is best-effort.
+    }
+  }, [state, stepIndex]);
 
   const step = STEPS[stepIndex];
   const isLast = stepIndex === STEPS.length - 1;
@@ -126,17 +190,14 @@ export function OnboardingFlow() {
       case "niche":
         return state.niche.length > 0;
       case "category":
-        if (!state.creator_category) return false;
+        // Skippable, but a selected "other" needs its description before Continue.
         if (state.creator_category === "other") {
           return state.creator_category_custom.trim().length > 0;
         }
         return true;
       case "goals":
-        return state.content_goals.length > 0;
       case "pillars":
-        return state.pillars.length > 0;
       case "experience":
-        return !!state.experience_level;
       case "tone":
         return true;
     }
@@ -145,7 +206,7 @@ export function OnboardingFlow() {
   const goNext = async () => {
     setError(null);
 
-    if (step.key === "goals" && !showGoalToast) {
+    if (step.key === "goals" && state.content_goals.length > 0 && !showGoalToast) {
       setShowGoalToast(true);
       window.setTimeout(() => setShowGoalToast(false), 1800);
     }
@@ -175,6 +236,7 @@ export function OnboardingFlow() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error ?? "Couldn't save onboarding.");
       }
+      clearDraft();
       router.replace("/library?welcome=1");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");

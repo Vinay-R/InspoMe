@@ -45,7 +45,21 @@ export default async function LoginPage({
         />
 
         <p className="text-center text-xs text-muted-foreground">
-          By continuing you agree to our terms and acknowledge our privacy practices.
+          By continuing you agree to our{" "}
+          <Link
+            href="/terms"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            terms
+          </Link>{" "}
+          and acknowledge our{" "}
+          <Link
+            href="/privacy"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            privacy practices
+          </Link>
+          .
         </p>
       </div>
     </main>

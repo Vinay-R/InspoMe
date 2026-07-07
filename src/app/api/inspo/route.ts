@@ -151,6 +151,26 @@ export async function POST(request: NextRequest) {
   });
 }
 
+// video_analysis.tags is a jsonb object of grouped string arrays (AnalysisTags).
+// The library only needs a flat, deduped list per item for filter chips.
+function flattenAnalysisTags(tags: unknown): string[] {
+  if (!tags || typeof tags !== "object" || Array.isArray(tags)) return [];
+  const out = new Set<string>();
+  for (const group of Object.values(tags as Record<string, unknown>)) {
+    if (!Array.isArray(group)) continue;
+    for (const t of group) {
+      if (typeof t === "string" && t.trim()) out.add(t.trim());
+    }
+  }
+  return [...out];
+}
+
+const GET_PAGE_DEFAULT = 30;
+const GET_PAGE_MAX = 60;
+// Legacy (no cursor/limit params) callers — the library pollers — get the
+// original fixed cap so their behavior is unchanged.
+const GET_LEGACY_LIMIT = 100;
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -162,6 +182,8 @@ export async function GET(request: NextRequest) {
   const platform = url.searchParams.get("platform");
   const analysisStatus = url.searchParams.get("analysis_status");
   const search = url.searchParams.get("search")?.trim();
+  const cursorParam = url.searchParams.get("cursor");
+  const limitParam = url.searchParams.get("limit");
 
   // Validate enum-typed params up front — Postgres throws a 500-producing
   // enum cast error on garbage values like `?platform=<script>`.
@@ -185,16 +207,42 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Cursor pagination is opt-in: only requests carrying `cursor` or `limit`
+  // get paged semantics. Legacy pollers (no params) keep the old fixed cap
+  // and full response shape.
+  const paginated = cursorParam !== null || limitParam !== null;
+  if (cursorParam !== null && Number.isNaN(Date.parse(cursorParam))) {
+    return apiError("invalid_input", {
+      devDetail: { param: "cursor", value: cursorParam },
+    });
+  }
+  let limit = GET_LEGACY_LIMIT;
+  if (paginated) {
+    const parsedLimit = limitParam !== null ? Number.parseInt(limitParam, 10) : NaN;
+    if (limitParam !== null && (!Number.isInteger(parsedLimit) || parsedLimit < 1)) {
+      return apiError("invalid_input", {
+        devDetail: { param: "limit", value: limitParam },
+      });
+    }
+    limit = Number.isInteger(parsedLimit)
+      ? Math.min(parsedLimit, GET_PAGE_MAX)
+      : GET_PAGE_DEFAULT;
+  }
+
+  // `video_analysis` has two FKs to inspo (inspo_id, and the composite
+  // (inspo_id, user_id) trust-hardening FK) — the embed must name the
+  // constraint or PostgREST rejects it as ambiguous.
   let query = supabase
     .from("inspo")
     .select(
-      "id, platform, url_original, url_canonical, deep_link_url, creator_handle, caption, thumbnail_url, save_reasons, analysis_status, media_status, metrics_status, created_at, last_analyzed_at",
+      "id, platform, url_original, url_canonical, deep_link_url, creator_handle, caption, thumbnail_url, save_reasons, analysis_status, media_status, metrics_status, created_at, last_analyzed_at, video_analysis!video_analysis_inspo_id_fkey(tags)",
     )
     .eq("user_id", user.id)
     .eq("user_hidden", false)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(limit);
 
+  if (cursorParam !== null) query = query.lt("created_at", cursorParam);
   if (platform) query = query.eq("platform", platform);
   if (analysisStatus) query = query.eq("analysis_status", analysisStatus);
   if (search) {
@@ -212,5 +260,37 @@ export async function GET(request: NextRequest) {
     return apiError("internal", { cause: error });
   }
 
-  return NextResponse.json({ success: true, data: data ?? [] });
+  // Replace the embedded video_analysis row with a flat `tags: string[]` so
+  // clients never see the join shape. PostgREST may return the one-to-one
+  // embed as an object or a single-element array depending on how it detects
+  // the unique index — normalize both.
+  const rows = (data ?? []) as Array<
+    Record<string, unknown> & {
+      created_at: string;
+      video_analysis?: unknown;
+    }
+  >;
+  const items = rows.map(({ video_analysis, ...rest }) => {
+    const embedded = Array.isArray(video_analysis)
+      ? (video_analysis[0] as unknown)
+      : video_analysis;
+    const tags =
+      embedded && typeof embedded === "object"
+        ? flattenAnalysisTags((embedded as { tags?: unknown }).tags)
+        : [];
+    return { ...rest, tags };
+  });
+
+  // A full page implies more rows may exist; the last row's created_at is
+  // the cursor for the next page.
+  const nextCursor =
+    paginated && items.length === limit
+      ? items[items.length - 1].created_at
+      : null;
+
+  return NextResponse.json({
+    success: true,
+    data: items,
+    ...(paginated ? { next_cursor: nextCursor } : {}),
+  });
 }

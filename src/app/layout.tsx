@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   description:
     "Save TikTok and Instagram inspiration. Understand why each video works. Learn reusable patterns to make better content.",
   applicationName: "InspoMe",
+  icons: {
+    // iOS ignores the manifest icons; it only honors apple-touch-icon.
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

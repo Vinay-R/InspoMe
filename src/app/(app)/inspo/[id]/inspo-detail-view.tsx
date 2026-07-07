@@ -4,7 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   ChevronLeft,
+  Copy,
   Loader2,
   RefreshCcw,
   AlertTriangle,
@@ -50,6 +52,75 @@ interface Props {
   initialAnalysis: VideoAnalysisRow | null;
   initialMetrics: PlatformMetricsRow | null;
   initialJob: IngestionJobRow | null;
+}
+
+const COPY_FEEDBACK_MS = 1500;
+
+/**
+ * Small ghost icon button that copies plain text and flips to a checkmark
+ * for a moment. Reused on the hook quote, reusable-pattern template, and
+ * transcript blocks.
+ */
+function CopyButton({
+  text,
+  label,
+  className,
+}: {
+  text: string;
+  label: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = React.useState(false);
+  const resetTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return; // clipboard unavailable/denied — leave the button as-is
+    }
+    setCopied(true);
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+    }
+    resetTimerRef.current = window.setTimeout(
+      () => setCopied(false),
+      COPY_FEEDBACK_MS,
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={label}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md border border-border bg-background/90 px-2 py-1 text-xs font-medium text-muted-foreground backdrop-blur transition-colors hover:border-foreground/40 hover:text-foreground",
+        copied && "text-emerald-600 hover:text-emerald-600",
+        className,
+      )}
+    >
+      {copied ? (
+        <>
+          <Check className="size-3.5" />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy className="size-3.5" />
+          Copy
+        </>
+      )}
+    </button>
+  );
 }
 
 const POLL_FAST_MS = 2000;
@@ -639,9 +710,16 @@ function HookSection({ data }: { data: Hook }) {
       </CardHeader>
       <CardContent className="space-y-3 text-sm leading-relaxed">
         {data.text && (
-          <blockquote className="rounded-lg border-l-4 border-brand bg-brand/5 px-4 py-3 text-base font-medium">
-            “{data.text}”
-          </blockquote>
+          <div className="relative">
+            <blockquote className="rounded-lg border-l-4 border-brand bg-brand/5 px-4 py-3 pr-20 text-base font-medium">
+              “{data.text}”
+            </blockquote>
+            <CopyButton
+              text={data.text}
+              label="Copy hook text"
+              className="absolute right-2 top-2"
+            />
+          </div>
         )}
         <div className="flex flex-wrap gap-2">
           {data.type && <Badge variant="brand">{data.type}</Badge>}
@@ -760,9 +838,16 @@ function AudioSection({ data }: { data: AudioAnalysis }) {
       </CardHeader>
       <CardContent className="space-y-3 text-sm leading-relaxed">
         {hasTranscript && (
-          <p className="rounded-md border border-border bg-secondary/50 p-3 italic">
-            “{data.transcript}”
-          </p>
+          <div className="relative">
+            <p className="rounded-md border border-border bg-secondary/50 p-3 pr-20 italic">
+              “{data.transcript}”
+            </p>
+            <CopyButton
+              text={data.transcript.trim()}
+              label="Copy transcript"
+              className="absolute right-2 top-2"
+            />
+          </div>
         )}
         <dl className="grid grid-cols-1 gap-y-2 sm:grid-cols-2">
           <KV label="Speaking style" value={data.speaking_style} />
@@ -850,9 +935,16 @@ function ReusablePatternSection({ data }: { data: ReusablePattern }) {
           <p className="text-base font-semibold">{data.name}</p>
         )}
         {data.template && (
-          <blockquote className="rounded-lg border border-brand/30 bg-background px-4 py-3 italic">
-            {data.template}
-          </blockquote>
+          <div className="relative">
+            <blockquote className="rounded-lg border border-brand/30 bg-background px-4 py-3 pr-20 italic">
+              {data.template}
+            </blockquote>
+            <CopyButton
+              text={data.template}
+              label="Copy pattern template"
+              className="absolute right-2 top-2"
+            />
+          </div>
         )}
         <dl className="space-y-2">
           {data.when_to_use && (

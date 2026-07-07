@@ -11,6 +11,7 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle2,
+  ClipboardPaste,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import { parseInspoUrl, isSupportedPlatform, platformLabel } from "@/lib/platfor
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { AnalysisStatus, MetricsStatus, Platform } from "@/lib/supabase/types";
 
-type InspoCard = {
+export type InspoCard = {
   id: string;
   platform: Platform;
   url_original: string;
@@ -32,6 +33,8 @@ type InspoCard = {
   caption: string | null;
   thumbnail_url: string | null;
   save_reasons: string[];
+  /** Flattened video_analysis tags — empty until analysis completes. */
+  tags: string[];
   analysis_status: AnalysisStatus;
   media_status: string;
   metrics_status: MetricsStatus;
@@ -41,6 +44,7 @@ type InspoCard = {
 
 interface Props {
   initialInspo: InspoCard[];
+  initialNextCursor: string | null;
   welcome: boolean;
 }
 
@@ -51,16 +55,52 @@ const POLL_STOP_AFTER_MS = 10 * 60_000;
 
 type PollPhase = "fast" | "slow" | "stopped";
 
-export function LibraryView({ initialInspo, welcome }: Props) {
+const LOAD_MORE_PAGE_SIZE = 30;
+
+// Stable no-op subscribe for useSyncExternalStore-based hydration detection.
+const subscribeNoop = () => () => {};
+
+// Newest-first merge: `fresh` is the head of the list (a poll of the first
+// page); keep any older rows we already loaded past it, deduped by id.
+function mergeById(fresh: InspoCard[], prev: InspoCard[]): InspoCard[] {
+  const freshIds = new Set(fresh.map((i) => i.id));
+  return [...fresh, ...prev.filter((i) => !freshIds.has(i.id))];
+}
+
+export function LibraryView({ initialInspo, initialNextCursor, welcome }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentPlatform = searchParams.get("platform") ?? "";
 
+  // ?add=<url> comes from the /save share-target redirect. Consume it once
+  // (lazy initializer, so a later router.replace can't re-trigger it) and
+  // open the Add panel prefilled.
+  const [addPrefill] = React.useState<string | null>(() =>
+    searchParams.get("add"),
+  );
+
   const [inspo, setInspo] = React.useState<InspoCard[]>(initialInspo);
-  const [showAdd, setShowAdd] = React.useState(initialInspo.length === 0 && welcome);
+  const [showAdd, setShowAdd] = React.useState(
+    (initialInspo.length === 0 && welcome) || Boolean(addPrefill),
+  );
   const [showWelcome, setShowWelcome] = React.useState(welcome);
   const [searchInput, setSearchInput] = React.useState("");
   const [activeReasons, setActiveReasons] = React.useState<string[]>([]);
+  const [activeTags, setActiveTags] = React.useState<string[]>([]);
+  const [nextCursor, setNextCursor] = React.useState<string | null>(
+    initialNextCursor,
+  );
+  const [loadingMore, setLoadingMore] = React.useState(false);
+
+  // Strip the consumed ?add= param from the URL (welcome=1 is left in place
+  // by the existing flow, but a stale add= would re-open the panel on reload).
+  React.useEffect(() => {
+    if (searchParams.get("add") === null) return;
+    const params = new URLSearchParams(searchParams);
+    params.delete("add");
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : "?", { scroll: false });
+  }, [searchParams, router]);
 
   function setPlatform(p: string) {
     const params = new URLSearchParams();
@@ -72,7 +112,38 @@ export function LibraryView({ initialInspo, welcome }: Props) {
   function clearFilters() {
     setSearchInput("");
     setActiveReasons([]);
+    setActiveTags([]);
     router.replace("?", { scroll: false });
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams();
+      if (currentPlatform) params.set("platform", currentPlatform);
+      params.set("cursor", nextCursor);
+      params.set("limit", String(LOAD_MORE_PAGE_SIZE));
+      const res = await fetch(`/api/inspo?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!Array.isArray(json.data)) return;
+      const page = json.data as InspoCard[];
+      // Poll updates and load-more can overlap — dedupe appended rows by id.
+      setInspo((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...page.filter((i) => !seen.has(i.id))];
+      });
+      setNextCursor(
+        typeof json.next_cursor === "string" ? json.next_cursor : null,
+      );
+    } catch {
+      // keep last good state; the button stays available for another try
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   const [pollPhase, setPollPhase] = React.useState<PollPhase>("fast");
@@ -113,7 +184,11 @@ export function LibraryView({ initialInspo, welcome }: Props) {
         });
         if (!res.ok) return;
         const json = await res.json();
-        if (Array.isArray(json.data)) setInspo(json.data);
+        // The poll returns the newest page only — merge (not replace) so
+        // rows fetched via "Load more" survive the refresh.
+        if (Array.isArray(json.data)) {
+          setInspo((prev) => mergeById(json.data as InspoCard[], prev));
+        }
       } catch {
         // keep last good state
       }
@@ -121,7 +196,18 @@ export function LibraryView({ initialInspo, welcome }: Props) {
     return () => clearInterval(interval);
   }, [inspo, currentPlatform, pollPhase]);
 
-  // All filtering is client-side: instant text match + reason intersection.
+  // Distinct tag vocabulary across loaded items, for the filter chips.
+  const allTags = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const i of inspo) {
+      for (const t of i.tags ?? []) set.add(t);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [inspo]);
+
+  // All filtering is client-side: instant text match + reason/tag
+  // intersection. Note: search and filters only cover rows loaded so far —
+  // items beyond the current cursor won't match until "Load more" pulls them.
   const term = searchInput.trim().toLowerCase();
   const filteredInspo = inspo.filter((i) => {
     if (term) {
@@ -132,10 +218,17 @@ export function LibraryView({ initialInspo, welcome }: Props) {
     if (activeReasons.length > 0) {
       if (!activeReasons.every((r) => i.save_reasons.includes(r))) return false;
     }
+    if (activeTags.length > 0) {
+      if (!activeTags.every((t) => (i.tags ?? []).includes(t))) return false;
+    }
     return true;
   });
 
-  const isFiltering = searchInput !== "" || currentPlatform !== "" || activeReasons.length > 0;
+  const isFiltering =
+    searchInput !== "" ||
+    currentPlatform !== "" ||
+    activeReasons.length > 0 ||
+    activeTags.length > 0;
 
   return (
     <div className="flex flex-1 flex-col gap-5">
@@ -169,6 +262,7 @@ export function LibraryView({ initialInspo, welcome }: Props) {
 
       {showAdd && (
         <AddInspoPanel
+          initialUrl={addPrefill}
           onClose={() => setShowAdd(false)}
           onSaved={(card) => {
             setInspo((prev) => [card, ...prev]);
@@ -195,6 +289,9 @@ export function LibraryView({ initialInspo, welcome }: Props) {
           onPlatformChange={setPlatform}
           activeReasons={activeReasons}
           onReasonsChange={setActiveReasons}
+          allTags={allTags}
+          activeTags={activeTags}
+          onTagsChange={setActiveTags}
           isFiltering={isFiltering}
           onClear={clearFilters}
         />
@@ -213,6 +310,14 @@ export function LibraryView({ initialInspo, welcome }: Props) {
           ))}
         </ul>
       )}
+
+      {nextCursor && inspo.length > 0 && (
+        <div className="flex justify-center pt-1">
+          <Button variant="outline" onClick={loadMore} loading={loadingMore}>
+            Load more
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -224,6 +329,9 @@ interface FilterBarProps {
   onPlatformChange: (p: string) => void;
   activeReasons: string[];
   onReasonsChange: (r: string[]) => void;
+  allTags: string[];
+  activeTags: string[];
+  onTagsChange: (t: string[]) => void;
   isFiltering: boolean;
   onClear: () => void;
 }
@@ -235,6 +343,9 @@ function FilterBar({
   onPlatformChange,
   activeReasons,
   onReasonsChange,
+  allTags,
+  activeTags,
+  onTagsChange,
   isFiltering,
   onClear,
 }: FilterBarProps) {
@@ -282,13 +393,34 @@ function FilterBar({
       </div>
 
       {/* Save reason chips */}
-      <ChipPicker
-        options={[...SAVE_REASONS]}
-        values={activeReasons}
-        onChange={onReasonsChange}
-        multi
-        allowCustom={false}
-      />
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Filter by reason
+        </p>
+        <ChipPicker
+          options={[...SAVE_REASONS]}
+          values={activeReasons}
+          onChange={onReasonsChange}
+          multi
+          allowCustom={false}
+        />
+      </div>
+
+      {/* AI tag chips — vocabulary comes from the loaded items' analyses */}
+      {allTags.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Filter by tag
+          </p>
+          <ChipPicker
+            options={allTags}
+            values={activeTags}
+            onChange={onTagsChange}
+            multi
+            allowCustom={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -361,21 +493,52 @@ function FilterEmptyState({ onClear }: { onClear: () => void }) {
 }
 
 function AddInspoPanel({
+  initialUrl,
   onClose,
   onSaved,
   onDuplicate,
 }: {
+  initialUrl?: string | null;
   onClose: () => void;
   onSaved: (card: InspoCard) => void;
   onDuplicate: (id: string) => void;
 }) {
-  const [url, setUrl] = React.useState("");
+  const [url, setUrl] = React.useState(initialUrl ?? "");
   const [reasons, setReasons] = React.useState<string[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [clipboardHint, setClipboardHint] = React.useState<string | null>(null);
+
+  // SSR renders "unsupported" and the real value takes over post-hydration —
+  // the no-effect-safe way to feature-detect a browser-only API.
+  const hydrated = React.useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+  const clipboardReadable =
+    hydrated &&
+    typeof navigator !== "undefined" &&
+    typeof navigator.clipboard?.readText === "function";
 
   const parsed = url.trim() ? parseInspoUrl(url.trim()) : null;
   const supportable = parsed ? isSupportedPlatform(parsed.platform) : null;
+
+  async function pasteFromClipboard() {
+    setClipboardHint(null);
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (text) {
+        // Setting the input runs the URL detection above on re-render.
+        setUrl(text);
+      } else {
+        setClipboardHint("Clipboard is empty — paste manually.");
+      }
+    } catch {
+      // NotAllowedError (permission denied) or unsupported context.
+      setClipboardHint("Paste manually.");
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -416,6 +579,7 @@ function AddInspoPanel({
         caption: null,
         thumbnail_url: null,
         save_reasons: reasons,
+        tags: [],
         analysis_status: json.data.analysis_status,
         media_status: "queued",
         metrics_status: "not_started",
@@ -447,15 +611,33 @@ function AddInspoPanel({
 
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <Input
-            type="url"
-            inputMode="url"
-            autoFocus
-            placeholder="https://www.tiktok.com/@creator/video/..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            aria-invalid={supportable === false}
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              type="url"
+              inputMode="url"
+              autoFocus
+              placeholder="https://www.tiktok.com/@creator/video/..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              aria-invalid={supportable === false}
+              className="flex-1"
+            />
+            {clipboardReadable && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={pasteFromClipboard}
+                className="shrink-0"
+                aria-label="Paste link from clipboard"
+              >
+                <ClipboardPaste className="size-4" />
+                Paste
+              </Button>
+            )}
+          </div>
+          {clipboardHint && (
+            <p className="text-xs text-muted-foreground">{clipboardHint}</p>
+          )}
           {parsed && (
             <p
               className={cn(

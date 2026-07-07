@@ -29,12 +29,16 @@ export async function refreshSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/auth");
   const isMarketingRoot = pathname === "/";
+  // Legal pages must be readable before sign-up (they're linked from /login).
+  const isLegalRoute = pathname === "/terms" || pathname === "/privacy";
 
-  if (!user && !isAuthRoute && !isMarketingRoot) {
+  if (!user && !isAuthRoute && !isMarketingRoot && !isLegalRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     if (pathname !== "/") {
-      url.searchParams.set("redirect", pathname);
+      // Keep the query string so share-target URLs (/save?url=...) survive the
+      // login round-trip; the auth callback only accepts same-origin paths.
+      url.searchParams.set("redirect", pathname + request.nextUrl.search);
     }
     return NextResponse.redirect(url);
   }

@@ -42,32 +42,31 @@ export async function POST(request: NextRequest) {
   }
   const v = parsed.data;
 
-  if (
-    v.preferred_content.length === 0 ||
-    v.niche.length === 0 ||
-    !v.creator_category ||
-    (v.creator_category === "other" &&
-      v.creator_category_custom.trim().length === 0) ||
-    v.content_goals.length === 0 ||
-    v.pillars.length === 0 ||
-    !v.experience_level
-  ) {
+  // Only formats + niche are required; category, goals, pillars, experience,
+  // and tone are skippable and save as empty/null.
+  if (v.preferred_content.length === 0 || v.niche.length === 0) {
     return apiError("invalid_input");
   }
+
+  // "other" without a description counts as skipped, not invalid.
+  const creatorCategory =
+    v.creator_category === "other" &&
+    v.creator_category_custom.trim().length === 0
+      ? ""
+      : v.creator_category;
 
   const { error } = await supabase
     .from("users")
     .update({
       preferred_content: v.preferred_content,
       niche: v.niche,
-      creator_category: v.creator_category,
+      // Postgres enum columns reject "" — skipped selections persist as null.
+      creator_category: creatorCategory || null,
       creator_category_custom:
-        v.creator_category === "other"
-          ? v.creator_category_custom.trim()
-          : null,
+        creatorCategory === "other" ? v.creator_category_custom.trim() : null,
       content_goals: v.content_goals,
       pillars: v.pillars,
-      experience_level: v.experience_level,
+      experience_level: v.experience_level || null,
       tone: v.tone,
       onboarding_completed: true,
       onboarding_completed_at: new Date().toISOString(),
