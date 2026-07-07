@@ -24,18 +24,15 @@ export default async function LoginPage({
 
   return (
     <main className="flex flex-1 items-center justify-center px-5 py-12">
-      <div className="w-full max-w-sm flex flex-col gap-8">
-        <div className="flex flex-col gap-2 text-center">
-          <Link
-            href="/"
-            className="self-center inline-flex items-center gap-2 font-semibold tracking-tight text-lg"
-          >
-            <span className="inline-block size-7 rounded-md bg-brand" />
-            InspoMe
-          </Link>
-          <p className="text-sm text-muted-foreground">
-            Save inspiration. Understand why it works.
-          </p>
+      <div className="w-full max-w-sm flex flex-col gap-7">
+        <div className="flex flex-col items-center gap-3.5 text-center">
+          <span className="size-[52px] rounded-[14px] bg-brand" />
+          <div>
+            <h1 className="h-page text-2xl">Welcome to InspoMe</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Save the content you admire. Understand why it works.
+            </p>
+          </div>
         </div>
 
         <LoginForm

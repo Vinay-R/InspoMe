@@ -93,7 +93,7 @@ export function PostsFeed({ posts, compareIds, onToggleCompare, onOpenCompare }:
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">Your posts</h2>
+        <h2 className="h-sec">Your posts</h2>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -306,7 +306,7 @@ function PostCard({
             </div>
           )}
           <div className="absolute left-2 top-2">
-            <Badge variant="secondary" className="bg-background/85 backdrop-blur">
+            <Badge variant="glass">
               {post.platform === "instagram" ? "Instagram" : "TikTok"}
             </Badge>
           </div>
@@ -382,7 +382,7 @@ function MetricsRow({
         </span>
       )}
       {metrics.engagement_rate != null && (
-        <span className="ml-auto font-medium text-foreground">
+        <span className="ml-auto font-mono font-medium tabular-nums text-foreground">
           {(metrics.engagement_rate * 100).toFixed(1)}% ER
         </span>
       )}

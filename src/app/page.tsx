@@ -67,7 +67,7 @@ export default async function HomePage() {
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">
             For short-form creators
           </p>
-          <h1 className="text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
+          <h1 className="font-display text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
             Stop saving.
             <br />
             Start studying.

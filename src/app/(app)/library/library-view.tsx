@@ -234,12 +234,10 @@ export function LibraryView({ initialInspo, initialNextCursor, welcome }: Props)
     <div className="flex flex-1 flex-col gap-5">
       {showWelcome && <WelcomeBanner onDismiss={() => setShowWelcome(false)} />}
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            Your Inspo
-          </h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="h-page">Your Inspo</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {inspo.length === 0 && !isFiltering
               ? "Save TikTok and Instagram links to start your library."
               : isFiltering
@@ -250,12 +248,11 @@ export function LibraryView({ initialInspo, initialNextCursor, welcome }: Props)
         {!showAdd && (
           <Button
             variant="brand"
-            size="lg"
             onClick={() => setShowAdd(true)}
             className="shrink-0"
           >
             <Plus className="size-4" />
-            Add inspo
+            Add
           </Button>
         )}
       </div>
@@ -394,9 +391,7 @@ function FilterBar({
 
       {/* Save reason chips */}
       <div className="flex flex-col gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Filter by reason
-        </p>
+        <p className="eyebrow">Filter by reason</p>
         <ChipPicker
           options={[...SAVE_REASONS]}
           values={activeReasons}
@@ -409,9 +404,7 @@ function FilterBar({
       {/* AI tag chips — vocabulary comes from the loaded items' analyses */}
       {allTags.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Filter by tag
-          </p>
+          <p className="eyebrow">Filter by tag</p>
           <ChipPicker
             options={allTags}
             values={activeTags}
@@ -723,9 +716,7 @@ function InspoCardItem({ inspo }: { inspo: InspoCard }) {
             </div>
           )}
           <div className="absolute left-2 top-2 flex items-center gap-1.5">
-            <Badge variant="secondary" className="bg-background/85 backdrop-blur">
-              {platformLabel(inspo.platform)}
-            </Badge>
+            <Badge variant="glass">{platformLabel(inspo.platform)}</Badge>
           </div>
           <div className="absolute right-2 top-2">
             <AnalysisStatusBadge status={inspo.analysis_status} />
@@ -764,18 +755,20 @@ function InspoCardItem({ inspo }: { inspo: InspoCard }) {
   );
 }
 
+// Thumbnail overlays use the glass badge (per the design) with a status-colored
+// icon so state stays legible over any artwork.
 function AnalysisStatusBadge({ status }: { status: AnalysisStatus }) {
   if (status === "complete") {
     return (
-      <Badge variant="success" className="bg-emerald-500/15 backdrop-blur">
-        <CheckCircle2 className="size-3" />
+      <Badge variant="glass">
+        <CheckCircle2 className="size-3 text-success" />
         Analyzed
       </Badge>
     );
   }
   if (status === "queued" || status === "processing") {
     return (
-      <Badge variant="secondary" className="bg-background/85 backdrop-blur">
+      <Badge variant="glass">
         <Loader2 className="size-3 animate-spin" />
         Analyzing…
       </Badge>
@@ -783,21 +776,22 @@ function AnalysisStatusBadge({ status }: { status: AnalysisStatus }) {
   }
   if (status === "failed") {
     return (
-      <Badge variant="danger" className="bg-destructive/15 backdrop-blur">
-        <AlertTriangle className="size-3" />
+      <Badge variant="glass">
+        <AlertTriangle className="size-3 text-destructive" />
         Retry
       </Badge>
     );
   }
   if (status === "partial") {
     return (
-      <Badge variant="warning" className="bg-amber-500/15 backdrop-blur">
+      <Badge variant="glass">
+        <AlertTriangle className="size-3 text-warning" />
         Partial
       </Badge>
     );
   }
   return (
-    <Badge variant="secondary" className="bg-background/85 backdrop-blur">
+    <Badge variant="glass">
       <ExternalLink className="size-3" />
       Saved
     </Badge>

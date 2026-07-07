@@ -18,14 +18,13 @@ import {
   Bookmark,
   Sparkles,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
-  CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { cn, formatCount, formatRelativeTime } from "@/lib/utils";
@@ -104,7 +103,7 @@ function CopyButton({
       aria-label={label}
       className={cn(
         "inline-flex items-center gap-1 rounded-md border border-border bg-background/90 px-2 py-1 text-xs font-medium text-muted-foreground backdrop-blur transition-colors hover:border-foreground/40 hover:text-foreground",
-        copied && "text-emerald-600 hover:text-emerald-600",
+        copied && "text-success hover:text-success",
         className,
       )}
     >
@@ -120,6 +119,59 @@ function CopyButton({
         </>
       )}
     </button>
+  );
+}
+
+/**
+ * The uniform section shell used across the analysis: a card with 18px
+ * padding, a header row (optional brand-tinted icon + title) and an optional
+ * muted subtitle, then the section body. `brand` tints the whole card.
+ */
+function SectionCard({
+  title,
+  description,
+  icon,
+  brand,
+  className,
+  children,
+}: {
+  title: string;
+  description?: React.ReactNode;
+  icon?: React.ReactNode;
+  brand?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Card
+      className={cn(
+        "p-[18px]",
+        brand && "border-brand/30 bg-brand/5",
+        className,
+      )}
+    >
+      <div className="mb-3">
+        <div className="flex items-center gap-2">
+          {icon}
+          <CardTitle>{title}</CardTitle>
+        </div>
+        {description && (
+          <CardDescription className="mt-1 text-[13px] leading-normal">
+            {description}
+          </CardDescription>
+        )}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+function KV({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <dt className="eyebrow">{label}</dt>
+      <dd className="mt-[3px] text-[13.5px]">{value || "—"}</dd>
+    </div>
   );
 }
 
@@ -239,10 +291,10 @@ export function InspoDetailView({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-[18px]">
       <Link
         href="/library"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronLeft className="size-4" />
         Library
@@ -342,13 +394,13 @@ function MediaHeader({
 }) {
   return (
     <Card className="overflow-hidden">
-      <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-0">
+      <div className="grid grid-cols-[140px_1fr]">
         <a
           href={inspo.deep_link_url}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Open original on ${platformLabel(inspo.platform)}`}
-          className="group relative block aspect-[9/12] sm:aspect-auto bg-secondary overflow-hidden"
+          className="group relative block overflow-hidden bg-secondary"
         >
           {inspo.thumbnail_url ? (
             <img
@@ -357,7 +409,7 @@ function MediaHeader({
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
+            <div className="flex h-full min-h-[160px] items-center justify-center p-6 text-center text-xs text-muted-foreground">
               {inspo.media_status === "queued"
                 ? "Fetching media…"
                 : "No thumbnail available"}
@@ -365,8 +417,8 @@ function MediaHeader({
           )}
           <div className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/30" />
         </a>
-        <div className="flex flex-col gap-3 p-5">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2.5 p-4">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">{platformLabel(inspo.platform)}</Badge>
             <AnalysisPill status={inspo.analysis_status} />
             <span className="text-xs text-muted-foreground">
@@ -375,11 +427,11 @@ function MediaHeader({
           </div>
 
           <div>
-            <p className="text-sm font-medium">
+            <p className="text-[14px] font-medium">
               {inspo.creator_handle ? `@${inspo.creator_handle}` : "Unknown creator"}
             </p>
             {inspo.caption && (
-              <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
+              <p className="mt-1 line-clamp-3 text-[13px] leading-normal text-muted-foreground">
                 {inspo.caption}
               </p>
             )}
@@ -395,13 +447,13 @@ function MediaHeader({
             </div>
           )}
 
-          <div className="mt-auto flex flex-col gap-1.5 pt-2">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mt-auto flex flex-col gap-1.5 pt-1">
+            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
               <button
                 type="button"
                 onClick={onRetry}
                 disabled={retrying}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
               >
                 <RefreshCcw
                   className={cn("size-3.5", retrying && "animate-spin")}
@@ -410,14 +462,11 @@ function MediaHeader({
                   ? "Re-analyze"
                   : "Retry analysis"}
               </button>
-              <span className="text-muted-foreground" aria-hidden>
-                ·
-              </span>
               <button
                 type="button"
                 onClick={onArchive}
                 disabled={archiving}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-destructive disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-destructive disabled:opacity-60"
               >
                 <Trash2 className="size-3.5" />
                 Archive
@@ -463,41 +512,38 @@ function PendingAnalysisCard({
   retrying: boolean;
 }) {
   return (
-    <Card>
-      <CardContent className="flex items-start gap-3 p-5">
-        <Loader2 className="size-5 mt-0.5 animate-spin text-brand" />
-        <div className="flex-1">
-          <p className="font-medium">Analyzing this inspo</p>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {job?.status === "downloading" && "Downloading the video…"}
-            {job?.status === "downloaded" && "Preparing for analysis…"}
-            {job?.status === "uploading_to_gemini" &&
-              "Sending to the analysis model…"}
-            {job?.status === "analyzing" &&
-              "Breaking down hook, structure, visuals, and audio…"}
-            {!job?.status &&
-              "Hook, structure, visuals, and reusable pattern coming up."}
-          </p>
-          {delayed && (
-            <div className="mt-3">
-              <p className="text-sm text-muted-foreground">
-                This is taking longer than usual. You can keep waiting or
-                retry.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={onRetry}
-                loading={retrying}
-              >
-                <RefreshCcw className="size-4" />
-                Retry analysis
-              </Button>
-            </div>
-          )}
-        </div>
-      </CardContent>
+    <Card className="flex items-start gap-3 p-[18px]">
+      <Loader2 className="mt-0.5 size-5 animate-spin text-brand" />
+      <div className="flex-1">
+        <p className="font-medium">Analyzing this inspo</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {job?.status === "downloading" && "Downloading the video…"}
+          {job?.status === "downloaded" && "Preparing for analysis…"}
+          {job?.status === "uploading_to_gemini" &&
+            "Sending to the analysis model…"}
+          {job?.status === "analyzing" &&
+            "Breaking down hook, structure, visuals, and audio…"}
+          {!job?.status &&
+            "Hook, structure, visuals, and reusable pattern coming up."}
+        </p>
+        {delayed && (
+          <div className="mt-3">
+            <p className="text-sm text-muted-foreground">
+              This is taking longer than usual. You can keep waiting or retry.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={onRetry}
+              loading={retrying}
+            >
+              <RefreshCcw className="size-4" />
+              Retry analysis
+            </Button>
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
@@ -512,28 +558,26 @@ function FailedBanner({
   job: IngestionJobRow | null;
 }) {
   return (
-    <Card className="border-destructive/30 bg-destructive/5">
-      <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-start">
-        <AlertTriangle className="size-5 mt-0.5 text-destructive" />
-        <div className="flex-1">
-          <p className="font-medium">Saved, but analysis failed</p>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {job?.error_message ??
-              "Something went wrong while breaking this video down."}{" "}
-            The link is still saved in your library.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={onRetry}
-            loading={retrying}
-          >
-            <RefreshCcw className="size-4" />
-            Retry analysis
-          </Button>
-        </div>
-      </CardContent>
+    <Card className="flex flex-col gap-3 border-destructive/30 bg-destructive/5 p-[18px] sm:flex-row sm:items-start">
+      <AlertTriangle className="mt-0.5 size-5 text-destructive" />
+      <div className="flex-1">
+        <p className="font-medium">Saved, but analysis failed</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {job?.error_message ??
+            "Something went wrong while breaking this video down."}{" "}
+          The link is still saved in your library.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={onRetry}
+          loading={retrying}
+        >
+          <RefreshCcw className="size-4" />
+          Retry analysis
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -547,60 +591,62 @@ function PerformanceSection({
 }) {
   if (!metrics && metricsStatus === "unavailable") {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance</CardTitle>
-          <CardDescription>
-            Metrics aren&apos;t available for this video. We&apos;ll surface them when we
-            connect TikTok / Instagram metrics in a future update.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <SectionCard
+        title="Performance"
+        description="Metrics aren't available for this video. We'll surface them when we connect TikTok / Instagram metrics in a future update."
+      />
     );
   }
   if (!metrics) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance</CardTitle>
-          <CardDescription>Loading metrics…</CardDescription>
-        </CardHeader>
-      </Card>
-    );
+    return <SectionCard title="Performance" description="Loading metrics…" />;
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Performance</CardTitle>
-        <CardDescription>
-          Source: {metrics.source} · Confidence: {metrics.confidence} · Updated{" "}
-          {formatRelativeTime(metrics.fetched_at)}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <Stat icon={<Eye className="size-4" />} label="Views" value={formatCount(metrics.views)} />
-          <Stat icon={<Heart className="size-4" />} label="Likes" value={formatCount(metrics.likes)} />
-          <Stat
-            icon={<MessageCircle className="size-4" />}
-            label="Comments"
-            value={formatCount(metrics.comments)}
-          />
-          <Stat icon={<Share2 className="size-4" />} label="Shares" value={formatCount(metrics.shares)} />
-          <Stat icon={<Bookmark className="size-4" />} label="Saves" value={formatCount(metrics.saves)} />
-        </div>
-        {metrics.engagement_rate !== null && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Engagement rate: {(metrics.engagement_rate * 100).toFixed(1)}%
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <SectionCard
+      title="Performance"
+      description={`Source: ${metrics.source} · Confidence: ${metrics.confidence} · Updated ${formatRelativeTime(metrics.fetched_at)}`}
+    >
+      <div className="grid grid-cols-3 gap-2">
+        <StatCell
+          icon={<Eye className="size-3.5" />}
+          label="Views"
+          value={formatCount(metrics.views)}
+        />
+        <StatCell
+          icon={<Heart className="size-3.5" />}
+          label="Likes"
+          value={formatCount(metrics.likes)}
+        />
+        <StatCell
+          icon={<MessageCircle className="size-3.5" />}
+          label="Comments"
+          value={formatCount(metrics.comments)}
+        />
+        <StatCell
+          icon={<Share2 className="size-3.5" />}
+          label="Shares"
+          value={formatCount(metrics.shares)}
+        />
+        <StatCell
+          icon={<Bookmark className="size-3.5" />}
+          label="Saves"
+          value={formatCount(metrics.saves)}
+        />
+        <StatCell
+          icon={<Zap className="size-3.5" />}
+          label="Eng. rate"
+          value={
+            metrics.engagement_rate !== null
+              ? `${(metrics.engagement_rate * 100).toFixed(1)}%`
+              : "—"
+          }
+        />
+      </div>
+    </SectionCard>
   );
 }
 
-function Stat({
+function StatCell({
   icon,
   label,
   value,
@@ -610,281 +656,247 @@ function Stat({
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-background p-3">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <div className="rounded-[10px] border border-border bg-background p-3">
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
         {icon}
         {label}
       </div>
-      <p className="mt-1.5 text-lg font-semibold tabular-nums">{value}</p>
+      <p className="mt-[5px] text-[18px] font-semibold tabular-nums">{value}</p>
     </div>
   );
 }
 
 function SummarySection({ analysis }: { analysis: VideoAnalysisRow }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Executive summary</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm leading-relaxed">
-        <p>{analysis.summary}</p>
-        <dl className="mt-3 grid grid-cols-1 gap-y-1.5 sm:grid-cols-3 text-sm">
-          <KV label="Category" value={analysis.content_category} />
-          <KV label="Topic" value={analysis.primary_topic} />
-          <KV label="Audience" value={analysis.target_audience} />
-        </dl>
-      </CardContent>
-    </Card>
-  );
-}
-
-function KV({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div>
-      <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-0.5">{value || "—"}</dd>
-    </div>
+    <SectionCard title="Executive summary">
+      <p className="text-[13.5px] leading-relaxed">{analysis.summary}</p>
+      <dl className="mt-3.5 grid grid-cols-3 gap-3">
+        <KV label="Category" value={analysis.content_category} />
+        <KV label="Topic" value={analysis.primary_topic} />
+        <KV label="Audience" value={analysis.target_audience} />
+      </dl>
+    </SectionCard>
   );
 }
 
 function WhyItWorkedSection({ data }: { data: WhyItWorked }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Why it worked</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm leading-relaxed">
-        <p className="text-base font-medium">{data.primary_reason}</p>
-        {data.secondary_reasons?.length > 0 && (
-          <ul className="space-y-1.5 list-disc pl-5 text-muted-foreground">
-            {data.secondary_reasons.map((r, i) => (
-              <li key={i}>{r}</li>
+    <SectionCard title="Why it worked">
+      <p className="text-[15px] font-medium leading-snug">
+        {data.primary_reason}
+      </p>
+      {data.secondary_reasons?.length > 0 && (
+        <ul className="mt-3 list-disc space-y-1 pl-[18px] text-[13px] leading-normal text-muted-foreground">
+          {data.secondary_reasons.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3.5 flex flex-wrap gap-1.5">
+        <Badge variant="secondary">Platform fit: {data.platform_fit}</Badge>
+        <Badge variant="secondary">Audience fit: {data.audience_fit}</Badge>
+      </div>
+      {data.creative_strengths?.length > 0 && (
+        <div className="mt-3.5">
+          <p className="eyebrow">Creative strengths</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {data.creative_strengths.map((s, i) => (
+              <Badge key={i} variant="success">
+                {s}
+              </Badge>
             ))}
-          </ul>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">Platform fit: {data.platform_fit}</Badge>
-          <Badge variant="secondary">Audience fit: {data.audience_fit}</Badge>
+          </div>
         </div>
-        {data.creative_strengths?.length > 0 && (
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              Creative strengths
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {data.creative_strengths.map((s, i) => (
-                <Badge key={i} variant="success">
-                  {s}
-                </Badge>
-              ))}
-            </div>
+      )}
+      {data.performance_risks?.length > 0 && (
+        <div className="mt-3">
+          <p className="eyebrow">Performance risks</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {data.performance_risks.map((s, i) => (
+              <Badge key={i} variant="warning">
+                {s}
+              </Badge>
+            ))}
           </div>
-        )}
-        {data.performance_risks?.length > 0 && (
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              Performance risks
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {data.performance_risks.map((s, i) => (
-                <Badge key={i} variant="warning">
-                  {s}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
 function HookSection({ data }: { data: Hook }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Hook</CardTitle>
-        <CardDescription>The first 1–3 seconds.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm leading-relaxed">
-        {data.text && (
-          <div className="relative">
-            <blockquote className="rounded-lg border-l-4 border-brand bg-brand/5 px-4 py-3 pr-20 text-base font-medium">
-              “{data.text}”
-            </blockquote>
-            <CopyButton
-              text={data.text}
-              label="Copy hook text"
-              className="absolute right-2 top-2"
-            />
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {data.type && <Badge variant="brand">{data.type}</Badge>}
-          {data.modality && <Badge variant="secondary">{data.modality}</Badge>}
-          {typeof data.strength_score === "number" && (
-            <Badge variant="outline">
-              Strength: {data.strength_score}/10
-            </Badge>
-          )}
+    <SectionCard title="Hook" description="The first 1–3 seconds.">
+      {data.text && (
+        <div className="relative">
+          <blockquote className="rounded-lg border-l-4 border-brand bg-brand/5 px-4 py-3 pr-20 text-base font-medium leading-snug">
+            “{data.text}”
+          </blockquote>
+          <CopyButton
+            text={data.text}
+            label="Copy hook text"
+            className="absolute right-2 top-2"
+          />
         </div>
-        {data.notes && <p className="text-muted-foreground">{data.notes}</p>}
-      </CardContent>
-    </Card>
+      )}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {data.type && <Badge variant="brand">{data.type}</Badge>}
+        {data.modality && <Badge variant="secondary">{data.modality}</Badge>}
+        {typeof data.strength_score === "number" && (
+          <Badge variant="outline">Strength: {data.strength_score}/10</Badge>
+        )}
+      </div>
+      {data.notes && (
+        <p className="mt-3 text-[13px] leading-normal text-muted-foreground">
+          {data.notes}
+        </p>
+      )}
+    </SectionCard>
   );
 }
 
 function StructureSection({ data }: { data: Structure }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Structure</CardTitle>
-        {data.retention_arc && (
-          <CardDescription>{data.retention_arc}</CardDescription>
+    <SectionCard title="Structure" description={data.retention_arc ?? undefined}>
+      <div className="flex flex-wrap gap-1.5">
+        {data.type && <Badge variant="brand">{data.type}</Badge>}
+        {data.pacing && <Badge variant="secondary">Pacing: {data.pacing}</Badge>}
+        {data.loopability && (
+          <Badge variant="secondary">Loopability: {data.loopability}</Badge>
         )}
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm leading-relaxed">
-        <div className="flex flex-wrap gap-2">
-          {data.type && <Badge variant="brand">{data.type}</Badge>}
-          {data.pacing && <Badge variant="secondary">Pacing: {data.pacing}</Badge>}
-          {data.loopability && (
-            <Badge variant="secondary">Loopability: {data.loopability}</Badge>
-          )}
-        </div>
-        {data.beats?.length > 0 && (
-          <ol className="relative ml-3 space-y-3 border-l border-border pl-4">
-            {data.beats.map((b: StructureBeat, i: number) => (
-              <li key={i} className="relative">
-                <span className="absolute -left-[21px] top-1 size-2.5 rounded-full bg-brand ring-4 ring-background" />
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {b.timestamp_start}s–{b.timestamp_end}s
-                  </span>
-                  <span className="font-medium">{b.label}</span>
-                </div>
-                <p className="text-muted-foreground">{b.description}</p>
-                {b.purpose && (
-                  <p className="text-xs text-muted-foreground italic">
-                    Purpose: {b.purpose}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      {data.beats?.length > 0 && (
+        <ol className="ml-1.5 mt-3.5 border-l border-border pl-[18px]">
+          {data.beats.map((b: StructureBeat, i: number) => (
+            <li key={i} className="relative pb-4 last:pb-0">
+              <span className="absolute -left-[24px] top-1 size-2.5 rounded-full bg-brand ring-4 ring-background" />
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {b.timestamp_start}s–{b.timestamp_end}s
+                </span>
+                <span className="text-[14px] font-medium">{b.label}</span>
+              </div>
+              <p className="mt-0.5 text-[13px] leading-normal text-muted-foreground">
+                {b.description}
+              </p>
+              {b.purpose && (
+                <p className="mt-0.5 text-[11px] italic text-muted-foreground">
+                  Purpose: {b.purpose}
+                </p>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </SectionCard>
   );
 }
 
 function VisualsSection({ data }: { data: Visuals }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Visuals</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm leading-relaxed">
-        <dl className="grid grid-cols-1 gap-y-2 sm:grid-cols-2">
-          <KV label="Style" value={data.style} />
-          <KV label="Framing" value={data.camera_framing} />
-          <KV label="Setting" value={data.setting} />
-          <KV label="Lighting" value={data.lighting} />
-          <KV label="Motion" value={data.motion} />
-          <KV label="Text overlay" value={data.text_overlay} />
-        </dl>
-        {data.visual_density && (
+    <SectionCard title="Visuals">
+      <dl className="grid grid-cols-2 gap-3">
+        <KV label="Style" value={data.style} />
+        <KV label="Framing" value={data.camera_framing} />
+        <KV label="Setting" value={data.setting} />
+        <KV label="Lighting" value={data.lighting} />
+        <KV label="Motion" value={data.motion} />
+        <KV label="Text overlay" value={data.text_overlay} />
+      </dl>
+      {data.visual_density && (
+        <div className="mt-3">
           <Badge variant="secondary">Density: {data.visual_density}</Badge>
-        )}
-        {data.notable_frames?.length > 0 && (
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground mt-2">
-              Notable frames
-            </p>
-            <ul className="mt-2 space-y-2">
-              {data.notable_frames.map((f: NotableFrame, i: number) => (
-                <li key={i} className="rounded-md border border-border p-3">
-                  <p className="text-xs tabular-nums text-muted-foreground">
-                    {f.timestamp}s
+        </div>
+      )}
+      {data.notable_frames?.length > 0 && (
+        <div className="mt-3.5">
+          <p className="eyebrow">Notable frames</p>
+          <ul className="mt-2 space-y-2">
+            {data.notable_frames.map((f: NotableFrame, i: number) => (
+              <li
+                key={i}
+                className="rounded-[10px] border border-border p-3"
+              >
+                <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {f.timestamp}s
+                </p>
+                <p className="mt-0.5 text-[13px] leading-normal">
+                  {f.description}
+                </p>
+                {f.why_it_matters && (
+                  <p className="mt-0.5 text-[11px] italic text-muted-foreground">
+                    {f.why_it_matters}
                   </p>
-                  <p className="mt-0.5">{f.description}</p>
-                  {f.why_it_matters && (
-                    <p className="mt-0.5 text-xs text-muted-foreground italic">
-                      {f.why_it_matters}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
 function AudioSection({ data }: { data: AudioAnalysis }) {
   const hasTranscript = (data.transcript ?? "").trim().length > 0;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Audio & transcript</CardTitle>
-        {!hasTranscript && (
-          <CardDescription>
-            Transcript unavailable. Visual analysis completed.
-          </CardDescription>
+    <SectionCard
+      title="Audio & transcript"
+      description={
+        hasTranscript
+          ? undefined
+          : "Transcript unavailable. Visual analysis completed."
+      }
+    >
+      {hasTranscript && (
+        <div className="relative">
+          <p className="rounded-lg border border-border bg-secondary/50 px-4 py-3 pr-20 text-[13.5px] italic leading-normal">
+            “{data.transcript}”
+          </p>
+          <CopyButton
+            text={(data.transcript ?? "").trim()}
+            label="Copy transcript"
+            className="absolute right-2 top-2"
+          />
+        </div>
+      )}
+      <dl
+        className={cn(
+          "grid grid-cols-2 gap-3",
+          hasTranscript && "mt-3.5",
         )}
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm leading-relaxed">
-        {hasTranscript && (
-          <div className="relative">
-            <p className="rounded-md border border-border bg-secondary/50 p-3 pr-20 italic">
-              “{data.transcript}”
-            </p>
-            <CopyButton
-              text={data.transcript.trim()}
-              label="Copy transcript"
-              className="absolute right-2 top-2"
-            />
-          </div>
-        )}
-        <dl className="grid grid-cols-1 gap-y-2 sm:grid-cols-2">
-          <KV label="Speaking style" value={data.speaking_style} />
-          <KV label="Pace" value={data.speaking_pace} />
-          <KV label="Music" value={data.music_usage} />
-          <KV label="Sound effects" value={data.sound_effects} />
-        </dl>
-        {data.key_phrases?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {data.key_phrases.map((p, i) => (
-              <Badge key={i} variant="outline">
-                {p}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      >
+        <KV label="Speaking style" value={data.speaking_style} />
+        <KV label="Pace" value={data.speaking_pace} />
+        <KV label="Music" value={data.music_usage} />
+        <KV label="Sound effects" value={data.sound_effects} />
+      </dl>
+      {data.key_phrases?.length > 0 && (
+        <div className="mt-3.5 flex flex-wrap gap-1.5">
+          {data.key_phrases.map((p, i) => (
+            <Badge key={i} variant="outline">
+              {p}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
 function EditingSection({ data }: { data: Editing }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Editing</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm leading-relaxed">
-        <div className="flex flex-wrap gap-2">
-          {data.pace && <Badge variant="secondary">Pace: {data.pace}</Badge>}
-          {data.cut_frequency && (
-            <Badge variant="secondary">Cuts: {data.cut_frequency}</Badge>
-          )}
-          {data.caption_style && (
-            <Badge variant="outline">Captions: {data.caption_style}</Badge>
-          )}
-        </div>
+    <SectionCard title="Editing">
+      <div className="flex flex-wrap gap-1.5">
+        {data.pace && <Badge variant="secondary">Pace: {data.pace}</Badge>}
+        {data.cut_frequency && (
+          <Badge variant="secondary">Cuts: {data.cut_frequency}</Badge>
+        )}
+        {data.caption_style && (
+          <Badge variant="outline">Captions: {data.caption_style}</Badge>
+        )}
+      </div>
+      <div className="mt-3.5 space-y-3">
         {data.retention_devices?.length > 0 && (
           <BadgeList label="Retention devices" items={data.retention_devices} />
         )}
@@ -897,17 +909,15 @@ function EditingSection({ data }: { data: Editing }) {
             items={data.pattern_interrupts}
           />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }
 
 function BadgeList({ label, items }: { label: string; items: string[] }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
+      <p className="eyebrow">{label}</p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {items.map((s, i) => (
           <Badge key={i} variant="outline">
@@ -922,58 +932,35 @@ function BadgeList({ label, items }: { label: string; items: string[] }) {
 function ReusablePatternSection({ data }: { data: ReusablePattern }) {
   if (!data.name && !data.template) return null;
   return (
-    <Card className="border-brand/30 bg-brand/5">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Lightbulb className="size-4 text-brand" />
-          <CardTitle>Reusable pattern</CardTitle>
+    <SectionCard
+      title="Reusable pattern"
+      icon={<Lightbulb className="size-4 text-brand" />}
+      brand
+      description="What you can take from this inspo."
+    >
+      {data.name && <p className="text-[15px] font-semibold">{data.name}</p>}
+      {data.template && (
+        <div className="relative mt-2.5">
+          <blockquote className="rounded-lg border border-brand/30 bg-background px-4 py-3 pr-20 italic leading-normal">
+            {data.template}
+          </blockquote>
+          <CopyButton
+            text={data.template}
+            label="Copy pattern template"
+            className="absolute right-2 top-2"
+          />
         </div>
-        <CardDescription>What you can take from this inspo.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm leading-relaxed">
-        {data.name && (
-          <p className="text-base font-semibold">{data.name}</p>
+      )}
+      <dl className="mt-3.5 space-y-2.5">
+        {data.when_to_use && <KV label="When to use" value={data.when_to_use} />}
+        {data.why_it_works && (
+          <KV label="Why it works" value={data.why_it_works} />
         )}
-        {data.template && (
-          <div className="relative">
-            <blockquote className="rounded-lg border border-brand/30 bg-background px-4 py-3 pr-20 italic">
-              {data.template}
-            </blockquote>
-            <CopyButton
-              text={data.template}
-              label="Copy pattern template"
-              className="absolute right-2 top-2"
-            />
-          </div>
+        {data.adaptation_notes && (
+          <KV label="Adapt for you" value={data.adaptation_notes} />
         )}
-        <dl className="space-y-2">
-          {data.when_to_use && (
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                When to use
-              </dt>
-              <dd className="mt-0.5">{data.when_to_use}</dd>
-            </div>
-          )}
-          {data.why_it_works && (
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                Why it works
-              </dt>
-              <dd className="mt-0.5">{data.why_it_works}</dd>
-            </div>
-          )}
-          {data.adaptation_notes && (
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">
-                Adapt for you
-              </dt>
-              <dd className="mt-0.5">{data.adaptation_notes}</dd>
-            </div>
-          )}
-        </dl>
-      </CardContent>
-    </Card>
+      </dl>
+    </SectionCard>
   );
 }
 
@@ -993,22 +980,15 @@ function TagsSection({ data }: { data: AnalysisTags }) {
   const nonEmpty = groups.filter((g) => (data[g.key] ?? []).length > 0);
   if (nonEmpty.length === 0) return null;
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-brand" />
-          <CardTitle>Tags</CardTitle>
-        </div>
-        <CardDescription>
-          What this inspo is. Power for search & filters.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+    <SectionCard
+      title="Tags"
+      icon={<Sparkles className="size-4 text-brand" />}
+      description="What this inspo is. Power for search & filters."
+    >
+      <div className="space-y-3">
         {nonEmpty.map((g) => (
           <div key={g.key}>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              {g.label}
-            </p>
+            <p className="eyebrow">{g.label}</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {data[g.key].map((t, i) => (
                 <Badge key={i} variant="secondary">
@@ -1018,7 +998,7 @@ function TagsSection({ data }: { data: AnalysisTags }) {
             </div>
           </div>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }

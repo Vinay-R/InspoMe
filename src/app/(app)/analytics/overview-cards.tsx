@@ -125,12 +125,10 @@ interface MetricCardProps {
 function MetricCard({ label, value, delta, copy, unavailable }: MetricCardProps) {
   return (
     <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
+      <p className="eyebrow">{label}</p>
       <p
         className={cn(
-          "text-2xl font-semibold leading-tight md:text-3xl",
+          "text-2xl font-semibold leading-tight tabular-nums md:text-3xl",
           unavailable && "text-muted-foreground text-base font-medium md:text-base",
         )}
       >
@@ -147,7 +145,7 @@ function DeltaPill({ delta }: { delta: ReturnType<typeof pctChange> }) {
     delta.direction === "up" ? ArrowUp : delta.direction === "down" ? ArrowDown : Minus;
   const color =
     delta.direction === "up"
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? "text-success"
       : delta.direction === "down"
         ? "text-destructive"
         : "text-muted-foreground";

@@ -246,12 +246,12 @@ export function OnboardingFlow() {
 
   return (
     <main className="flex flex-1 flex-col bg-background">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-xl items-center gap-3 px-5 py-4">
+      <header>
+        <div className="mx-auto flex max-w-xl items-center gap-2.5 px-5 pt-4">
           <span className="inline-block size-6 rounded-md bg-brand" />
           <span className="font-semibold tracking-tight">InspoMe</span>
         </div>
-        <div className="h-1 w-full bg-secondary">
+        <div className="mt-3.5 h-1 w-full bg-secondary">
           <div
             className="h-full bg-brand transition-[width] duration-300 ease-out"
             style={{ width: `${progressPct}%` }}
@@ -266,12 +266,8 @@ export function OnboardingFlow() {
 
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col px-5 py-8 md:py-12">
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {step.subtitle}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            {step.prompt}
-          </h1>
+          <p className="eyebrow">{step.subtitle}</p>
+          <h1 className="h-page">{step.prompt}</h1>
           {step.helper && (
             <p className="text-sm text-muted-foreground">{step.helper}</p>
           )}
@@ -469,7 +465,7 @@ function ToastBanner({ show, message }: { show: boolean; message: string }) {
       )}
     >
       <div className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2.5 text-sm font-medium text-background shadow-lg">
-        <Sparkles className="size-4" />
+        <Sparkles className="size-4 text-brand" />
         {message}
       </div>
     </div>

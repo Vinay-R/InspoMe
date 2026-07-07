@@ -182,14 +182,14 @@ export function AnalyticsView({
       <Header
         right={
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-full border border-border p-1">
+            <div className="flex items-center gap-0.5 rounded-full border border-border p-0.5">
               {WINDOW_OPTIONS.map((w) => (
                 <button
                   key={w}
                   type="button"
                   onClick={() => setWindow(w)}
                   className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
                     window === w
                       ? "bg-foreground text-background"
                       : "text-muted-foreground hover:text-foreground",
@@ -256,11 +256,11 @@ export function AnalyticsView({
 
 function Header({ right }: { right?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Analytics</h1>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1">
+        <h1 className="h-page">Analytics</h1>
         <p className="text-sm text-muted-foreground">
-          Understand what&apos;s working and what to post next.
+          What&apos;s working and what to post next.
         </p>
       </div>
       {right}
@@ -320,8 +320,8 @@ function SuccessBanner({
   onDismiss: () => void;
 }) {
   return (
-    <div className="relative flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 pr-10 text-sm">
-      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+    <div className="relative flex items-start gap-3 rounded-xl border border-success/30 bg-success/5 p-3 pr-10 text-sm">
+      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
       <p className="text-foreground">{message}</p>
       <button
         type="button"
@@ -341,7 +341,7 @@ function EmptyHero() {
       <div className="inline-flex size-12 items-center justify-center rounded-full bg-brand/15 text-brand">
         <Sparkles className="size-6" />
       </div>
-      <p className="font-medium">Your coach is one click away</p>
+      <p className="font-display font-semibold">Your coach is one click away</p>
       <p className="max-w-sm text-sm text-muted-foreground">
         Connect Instagram or TikTok to see what&apos;s working, get plain-English
         insights, and decide what to post next.

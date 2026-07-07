@@ -3,7 +3,24 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* =============================================================================
+   InspoMe — Colors & Type (v2 design system)
+   Brand primary: #f58057 (warm coral) — the only saturated hue.
+   Neutrals are warm off-whites & near-blacks; semantics are a sage-leaning
+   green and a brick-leaning red so they sit with the coral, not against it.
+   Type: Inter (body/UI) · Space Grotesk (display headings) · Geist Mono (numerals).
+   ============================================================================= */
+
 :root {
+  /* Brand */
+  --brand: #f58057;
+  --brand-foreground: oklch(0.16 0.025 35);
+  --brand-hover: #f06d3f;
+  --brand-press: #e15a2c;
+  --brand-soft: color-mix(in oklab, #f58057 15%, transparent);
+  --brand-soft-border: color-mix(in oklab, #f58057 30%, transparent);
+
+  /* Surfaces */
   --background: oklch(0.99 0 0);
   --foreground: oklch(0.18 0.015 35);
   --card: oklch(1 0 0);
@@ -15,22 +32,40 @@
   --secondary: oklch(0.96 0.015 55);
   --secondary-foreground: oklch(0.21 0.025 35);
   --muted: oklch(0.96 0.015 55);
-  --muted-foreground: oklch(0.54 0.025 35);
+  --muted-foreground: oklch(0.55 0.004 250);
   --accent: oklch(0.95 0.025 45);
   --accent-foreground: oklch(0.21 0.025 35);
-  --destructive: oklch(0.6 0.22 25);
+
+  /* Semantics — warmed & slightly muted to fit the coral palette */
+  --destructive: oklch(0.57 0.17 32);
   --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.64 0.1 155);
+  --success-foreground: oklch(0.99 0 0);
+  --success-soft: color-mix(in oklab, var(--success) 14%, transparent);
+  --warning: #f59e0b;
+  --warning-foreground: oklch(0.99 0 0);
+  --warning-soft: color-mix(in oklab, var(--warning) 12%, transparent);
+
+  /* Lines & states */
   --border: oklch(0.9 0.015 45);
   --input: oklch(0.9 0.015 45);
   --ring: #f58057;
-  --brand: #f58057;
-  --brand-foreground: oklch(0.16 0.025 35);
   --radius: 0.75rem;
+
+  /* Chart palette — coral is the one accent; the rest is a calm warm-neutral
+     ramp (light greige → deep charcoal) so charts read calm, not rainbow. */
   --chart-1: #f58057;
-  --chart-2: oklch(0.62 0.16 245);
-  --chart-3: oklch(0.7 0.15 165);
-  --chart-4: oklch(0.7 0.16 80);
-  --chart-5: oklch(0.62 0.18 320);
+  --chart-2: oklch(0.8 0.008 70);
+  --chart-3: oklch(0.64 0.008 70);
+  --chart-4: oklch(0.46 0.008 65);
+  --chart-5: oklch(0.3 0.008 60);
+
+  /* Elevation (shadcn-style, very subtle) */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 1px -1px rgb(0 0 0 / 0.04);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  --shadow-brand: 0 6px 24px -6px color-mix(in oklab, #f58057 45%, transparent);
 }
 
 .dark {
@@ -48,18 +83,18 @@
   --muted-foreground: oklch(0.66 0 0);
   --accent: oklch(0.24 0 0);
   --accent-foreground: oklch(0.97 0 0);
-  --destructive: oklch(0.62 0.2 25);
+  --destructive: oklch(0.6 0.16 32);
   --destructive-foreground: oklch(0.97 0 0);
+  --success: oklch(0.68 0.1 155);
+  --warning: #fbbf24;
   --border: oklch(0.28 0 0);
   --input: oklch(0.28 0 0);
   --ring: #f58057;
-  --brand: #f58057;
-  --brand-foreground: oklch(0.16 0.025 35);
   --chart-1: #f58057;
-  --chart-2: oklch(0.7 0.16 245);
-  --chart-3: oklch(0.78 0.14 165);
-  --chart-4: oklch(0.78 0.15 80);
-  --chart-5: oklch(0.72 0.18 320);
+  --chart-2: oklch(0.75 0.008 70);
+  --chart-3: oklch(0.62 0.008 70);
+  --chart-4: oklch(0.5 0.008 65);
+  --chart-5: oklch(0.38 0.008 60);
 }
 
 @theme inline {
@@ -79,22 +114,31 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-press: var(--brand-press);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
   --font-mono: var(--font-geist-mono);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-brand: var(--shadow-brand);
 }
 
 @layer base {
@@ -113,5 +157,34 @@
   }
   ::selection {
     background-color: color-mix(in oklab, var(--brand) 30%, transparent);
+  }
+}
+
+@layer components {
+  /* Display headings — Space Grotesk, tight tracking. Use `.font-display` for
+     the family alone, or `.h-page` / `.h-sec` for the full heading treatment. */
+  .font-display {
+    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  }
+  .h-page {
+    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1.625rem;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .h-sec {
+    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1.1875rem;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+  }
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
   }
 }
