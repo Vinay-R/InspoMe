@@ -4,7 +4,7 @@
 
 ## What this is
 
-**InspoMe** — Next.js 16 (App Router, Turbopack) app where creators save TikTok / Instagram videos and get AI-powered "why this works" analysis to learn reusable patterns.
+**InspoMe** — npm-workspaces monorepo. `apps/web` is the Next.js 16 (App Router, Turbopack) app where creators save TikTok / Instagram videos and get AI-powered "why this works" analysis to learn reusable patterns. `apps/mobile` (Expo, in progress) is the iOS/Android client — its reason to exist is the iOS share sheet. `packages/` holds shared code (types, tokens) as it gets extracted.
 
 - **Phase 1 (shipped 2026-04-26):** auth (Supabase magic link + Google OAuth), 7-step onboarding, library, detail page, ingestion service abstraction with stub providers.
 - **Phase 2 (shipped 2026-04-28):** real Cobalt (IG) + Apify (TikTok) + Gemini multimodal analysis behind env-gated provider selection. `waitUntil` runner. Dark mode. End-to-end live in production.
@@ -21,10 +21,10 @@ User saves a URL → Next.js route inserts an `inspo` row + `ingestion_job` row 
 - **Worklogs (gitignored):** `worklogs/phase*.md` — phase-by-phase decisions, gotchas, current state. **Read the latest worklog before any non-trivial change.**
 - **Spec:** `inspome_v3_inspo_page_mvp_spec_with_onboarding.md` at repo root — UX + data model source of truth.
 - **Cobalt docs (gitignored):** `cobalt_docs/` — local copies of Cobalt's protect-an-instance docs (note: v10-era; current is v11).
-- **Ingestion code:** `src/server/ingestion/` — providers, service, schema, types.
-- **App code:** `src/app/(app)/` — auth-gated app shell. `src/app/auth/`, `src/app/login/`, `src/app/onboarding/` — pre-auth flows.
-- **Supabase migrations:** `supabase/migrations/` — schema source of truth.
-- **Server-only env getters:** `src/lib/env.ts` — never read `process.env.*` directly outside this file.
+- **Ingestion code:** `apps/web/src/server/ingestion/` — providers, service, schema, types.
+- **App code:** `apps/web/src/app/(app)/` — auth-gated app shell. `apps/web/src/app/auth/`, `.../login/`, `.../onboarding/` — pre-auth flows.
+- **Supabase migrations:** `supabase/migrations/` (repo root — shared backend) — schema source of truth.
+- **Server-only env getters:** `apps/web/src/lib/env.ts` — never read `process.env.*` directly outside this file.
 
 ## Conventions
 
@@ -61,10 +61,9 @@ Server-only:
 
 ## Operating
 
-- **Dev server:** `npm run dev` (Turbopack, port 3000). Logs to terminal; tail `/tmp/inspome-dev.log` if started in background.
-- **Typecheck:** `npx tsc --noEmit`.
-- **Lint:** `npm run lint`. Existing `<img>` warnings are accepted; flag any new ones in review.
-- **Prod URL:** https://inspo-me.vercel.app — auto-deploys from `main`. Verify deploy with `gh api repos/Vinay-R/InspoMe/deployments --jq '.[0]'`.
+- **All commands run from repo root** (npm workspaces delegate to `apps/web`): `npm run dev` (Turbopack, port 3000; tail `/tmp/inspome-dev.log` if backgrounded), `npm run build`, `npm run lint`, `npm run typecheck`. Existing `<img>` lint warnings are accepted; flag any new ones in review.
+- **Single lockfile at repo root** — never create per-workspace lockfiles.
+- **Prod URL:** https://inspo-me.vercel.app — auto-deploys from `main` (Vercel Root Directory = `apps/web`). Verify deploy with `gh api repos/Vinay-R/InspoMe/deployments --jq '.[0]'`.
 
 ## Project preferences
 
