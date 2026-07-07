@@ -11,6 +11,7 @@
 - **Phase 3 (shipped 2026-04-30):** Upstash rate limit (10/hr on save+retry), prod-safe API error mapper, library search/filter, editable settings. PostHog wiring NOT done (still open).
 - **Phase 4 (shipped 2026-05-04):** `/analytics` creator dashboard — stub providers + real Instagram OAuth (Meta dev-mode), AES-GCM token encryption, 2-tab bottom nav. See `worklogs/phase4-analytics.md`.
 - **Phase 5 (in progress, started 2026-07-06):** 5A trust hardening (token exposure, stuck-job reaper, dedup, error hygiene, thumbnail persistence) → 5B funnel (landing, PWA share-target, skippable onboarding, actionable analysis) → 5C business (usage metering, Stripe freemium, digests). See `worklogs/phase5-consumer-readiness.md`.
+- **Design v2 + monorepo + mobile scaffold (shipped 2026-07-07):** full visual reskin (Inter/Space Grotesk/Geist Mono, coral token system — from the "InspoMe App v2" Claude Design project); repo converted to npm workspaces (`apps/web`, `apps/mobile`, `packages/shared`); Expo SDK 57 app scaffolded (branded placeholder, `inspome://` scheme). Mobile next steps: auth → API bearer fallback → iOS share extension. See `worklogs/design-v2-reskin.md` + `worklogs/monorepo-and-mobile.md`.
 
 ## Architecture (one-paragraph mental model)
 
