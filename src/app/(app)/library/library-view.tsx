@@ -44,6 +44,13 @@ interface Props {
   welcome: boolean;
 }
 
+const POLL_FAST_MS = 2500;
+const POLL_SLOW_MS = 10_000;
+const POLL_SLOW_AFTER_MS = 90_000;
+const POLL_STOP_AFTER_MS = 10 * 60_000;
+
+type PollPhase = "fast" | "slow" | "stopped";
+
 export function LibraryView({ initialInspo, welcome }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,13 +75,35 @@ export function LibraryView({ initialInspo, welcome }: Props) {
     router.replace("?", { scroll: false });
   }
 
+  const [pollPhase, setPollPhase] = React.useState<PollPhase>("fast");
+  const pollingSinceRef = React.useRef<number | null>(null);
+
   // Poll while any card is mid-enrichment so the user sees progressive updates.
+  // After 90s of continuous pending we back off to a slow interval; after
+  // 10 minutes we stop entirely (the server-side reaper will have failed the
+  // job by then — a manual refresh picks that up).
   React.useEffect(() => {
     const hasPending = inspo.some(
       (i) => i.analysis_status === "queued" || i.analysis_status === "processing",
     );
-    if (!hasPending) return;
+    if (!hasPending) {
+      pollingSinceRef.current = null;
+      return;
+    }
+    if (pollPhase === "stopped") return;
+    if (pollingSinceRef.current === null) {
+      pollingSinceRef.current = Date.now();
+    }
+    const startedAt = pollingSinceRef.current;
     const interval = setInterval(async () => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= POLL_STOP_AFTER_MS) {
+        setPollPhase("stopped");
+        return;
+      }
+      if (elapsed >= POLL_SLOW_AFTER_MS) {
+        setPollPhase((p) => (p === "fast" ? "slow" : p));
+      }
       try {
         const params = new URLSearchParams();
         if (currentPlatform) params.set("platform", currentPlatform);
@@ -88,9 +117,9 @@ export function LibraryView({ initialInspo, welcome }: Props) {
       } catch {
         // keep last good state
       }
-    }, 2500);
+    }, pollPhase === "slow" ? POLL_SLOW_MS : POLL_FAST_MS);
     return () => clearInterval(interval);
-  }, [inspo, currentPlatform]);
+  }, [inspo, currentPlatform, pollPhase]);
 
   // All filtering is client-side: instant text match + reason intersection.
   const term = searchInput.trim().toLowerCase();
@@ -143,8 +172,16 @@ export function LibraryView({ initialInspo, welcome }: Props) {
           onClose={() => setShowAdd(false)}
           onSaved={(card) => {
             setInspo((prev) => [card, ...prev]);
+            // New pending item — restart the polling clock from scratch.
+            pollingSinceRef.current = null;
+            setPollPhase("fast");
             setShowAdd(false);
             router.push(`/inspo/${card.id}`);
+          }}
+          onDuplicate={(id) => {
+            // URL was already saved — just go to the existing item.
+            setShowAdd(false);
+            router.push(`/inspo/${id}`);
           }}
         />
       )}
@@ -326,9 +363,11 @@ function FilterEmptyState({ onClear }: { onClear: () => void }) {
 function AddInspoPanel({
   onClose,
   onSaved,
+  onDuplicate,
 }: {
   onClose: () => void;
   onSaved: (card: InspoCard) => void;
+  onDuplicate: (id: string) => void;
 }) {
   const [url, setUrl] = React.useState("");
   const [reasons, setReasons] = React.useState<string[]>([]);
@@ -354,6 +393,16 @@ function AddInspoPanel({
         body: JSON.stringify({ url: url.trim(), save_reasons: reasons }),
       });
       const json = await res.json();
+      // Already saved before — the API returns `duplicate: true` with the
+      // existing inspo id. Navigate there instead of adding a second card.
+      if (res.ok && (json?.duplicate === true || json?.data?.duplicate === true)) {
+        const existingId =
+          json?.data?.inspo_id ?? json?.data?.id ?? json?.inspo_id ?? json?.id;
+        if (typeof existingId === "string" && existingId) {
+          onDuplicate(existingId);
+          return;
+        }
+      }
       if (!res.ok || !json.success) {
         throw new Error(json.error ?? "Couldn't save your inspo.");
       }
@@ -463,6 +512,14 @@ function AddInspoPanel({
 }
 
 function InspoCardItem({ inspo }: { inspo: InspoCard }) {
+  // Expired CDN thumbnails fail to load — fall back to the placeholder instead
+  // of a broken black box. Tracking the failed URL (not a boolean) lets a
+  // fresh URL from a later poll get another chance.
+  const [failedThumbUrl, setFailedThumbUrl] = React.useState<string | null>(null);
+  const thumbnailUrl =
+    inspo.thumbnail_url && inspo.thumbnail_url !== failedThumbUrl
+      ? inspo.thumbnail_url
+      : null;
   return (
     <li>
       <Link
@@ -470,12 +527,13 @@ function InspoCardItem({ inspo }: { inspo: InspoCard }) {
         className="group block overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-foreground/30"
       >
         <div className="relative aspect-[9/12] w-full overflow-hidden bg-secondary">
-          {inspo.thumbnail_url ? (
+          {thumbnailUrl ? (
             <img
-              src={inspo.thumbnail_url}
+              src={thumbnailUrl}
               alt=""
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
               loading="lazy"
+              onError={() => setFailedThumbUrl(thumbnailUrl)}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-muted-foreground">

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
   const otpType = url.searchParams.get("type") as EmailOtpType | null;
-  const redirectTo = url.searchParams.get("redirect") ?? "/";
+  const redirectTo = safeRedirectPath(url.searchParams.get("redirect"));
   const errorDescription = url.searchParams.get("error_description");
 
   if (errorDescription) {
@@ -39,6 +39,17 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.redirect(new URL("/login", url.origin));
+}
+
+// Open-redirect guard: only same-origin paths are allowed. "//evil.com" and
+// "/\evil.com" are protocol-relative escapes (browsers normalize backslashes),
+// and absolute URLs would override the origin in `new URL(path, origin)`.
+function safeRedirectPath(value: string | null): string {
+  if (!value) return "/";
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
+    return "/";
+  }
+  return value;
 }
 
 function redirectToLoginWithError(url: URL, message: string) {

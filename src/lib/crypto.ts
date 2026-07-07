@@ -1,14 +1,16 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:crypto";
+import { serverEnv } from "@/lib/env";
 
 // AES-GCM symmetric encryption for OAuth tokens at rest.
 //
 // Set TOKEN_ENCRYPTION_KEY to any string (we hash it to 32 bytes). If the env
-// is absent we store plaintext with a sentinel prefix — fine for local dev
-// against a fresh database, but production must set the key.
+// is absent we store plaintext with a sentinel prefix in dev only — fine for
+// local iteration against a fresh database. In production a missing key is a
+// misconfiguration and encryptToken throws instead of storing plaintext.
 //
 // Format: "v1:gcm:<iv-b64>:<authTag-b64>:<ciphertext-b64>" when encrypted,
-//         "v0:plain:<plaintext>" when no key is configured.
+//         "v0:plain:<plaintext>" when no key is configured (dev only).
 //
 // Rotation: bump the key, re-encrypt rows by reading + re-writing each token.
 // We don't ship a rotation tool yet — note this when we ramp to other users.
@@ -16,7 +18,7 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:
 const ALG = "aes-256-gcm";
 
 function keyFromEnv(): Buffer | null {
-  const raw = process.env.TOKEN_ENCRYPTION_KEY?.trim();
+  const raw = serverEnv.tokenEncryptionKey;
   if (!raw) return null;
   // Hash any-length input to a 32-byte key. Don't use as-is in case the user
   // sets a short or non-binary string.
@@ -25,7 +27,18 @@ function keyFromEnv(): Buffer | null {
 
 export function encryptToken(plaintext: string): string {
   const key = keyFromEnv();
-  if (!key) return `v0:plain:${plaintext}`;
+  if (!key) {
+    // Fail closed in production: storing OAuth tokens as plaintext is never
+    // acceptable there. isTokenEncryptionConfigured() is the same check —
+    // callers can use it to surface config errors before hitting this throw.
+    if (serverEnv.isProduction) {
+      throw new Error(
+        "TOKEN_ENCRYPTION_KEY is not set. Refusing to store OAuth tokens in " +
+          "plaintext in production — set TOKEN_ENCRYPTION_KEY and retry.",
+      );
+    }
+    return `v0:plain:${plaintext}`;
+  }
   const iv = randomBytes(12);
   const cipher = createCipheriv(ALG, key, iv);
   const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);

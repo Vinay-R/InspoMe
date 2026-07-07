@@ -8,7 +8,9 @@
 
 - **Phase 1 (shipped 2026-04-26):** auth (Supabase magic link + Google OAuth), 7-step onboarding, library, detail page, ingestion service abstraction with stub providers.
 - **Phase 2 (shipped 2026-04-28):** real Cobalt (IG) + Apify (TikTok) + Gemini multimodal analysis behind env-gated provider selection. `waitUntil` runner. Dark mode. End-to-end live in production.
-- **Phase 3 (next):** rate limiting, prod-safe error mapper, search/filter UI on library, editable onboarding fields, PostHog wiring.
+- **Phase 3 (shipped 2026-04-30):** Upstash rate limit (10/hr on save+retry), prod-safe API error mapper, library search/filter, editable settings. PostHog wiring NOT done (still open).
+- **Phase 4 (shipped 2026-05-04):** `/analytics` creator dashboard — stub providers + real Instagram OAuth (Meta dev-mode), AES-GCM token encryption, 2-tab bottom nav. See `worklogs/phase4-analytics.md`.
+- **Phase 5 (in progress, started 2026-07-06):** 5A trust hardening (token exposure, stuck-job reaper, dedup, error hygiene, thumbnail persistence) → 5B funnel (landing, PWA share-target, skippable onboarding, actionable analysis) → 5C business (usage metering, Stripe freemium, digests). See `worklogs/phase5-consumer-readiness.md`.
 
 ## Architecture (one-paragraph mental model)
 
@@ -16,7 +18,7 @@ User saves a URL → Next.js route inserts an `inspo` row + `ingestion_job` row 
 
 ## Where to find what
 
-- **Worklogs (gitignored):** `worklogs/phase1-mvp-scaffold.md`, `worklogs/phase2-real-providers.md` — phase-by-phase decisions, gotchas, current state. **Read the latest worklog before any non-trivial change.**
+- **Worklogs (gitignored):** `worklogs/phase*.md` — phase-by-phase decisions, gotchas, current state. **Read the latest worklog before any non-trivial change.**
 - **Spec:** `inspome_v3_inspo_page_mvp_spec_with_onboarding.md` at repo root — UX + data model source of truth.
 - **Cobalt docs (gitignored):** `cobalt_docs/` — local copies of Cobalt's protect-an-instance docs (note: v10-era; current is v11).
 - **Ingestion code:** `src/server/ingestion/` — providers, service, schema, types.

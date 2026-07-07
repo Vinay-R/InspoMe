@@ -275,6 +275,16 @@ export type ConnectedAccountRow = {
   updated_at: string;
 };
 
+/**
+ * Client-safe projection of connected_accounts. Encrypted OAuth tokens must
+ * never cross into "use client" components or RSC payloads — select this
+ * shape (not `*`) whenever rows flow toward the browser.
+ */
+export type ConnectedAccountClientRow = Omit<
+  ConnectedAccountRow,
+  "access_token_encrypted" | "refresh_token_encrypted"
+>;
+
 export type CreatorPostRow = {
   id: string;
   user_id: string;

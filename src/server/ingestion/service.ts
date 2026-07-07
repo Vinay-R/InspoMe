@@ -17,6 +17,90 @@ import { StubGeminiProvider } from "./providers/stub-gemini";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { serverEnv } from "@/lib/env";
 import { parseInspoUrl } from "@/lib/platform";
+import { userSafeJobError } from "./job-errors";
+import { buildMediaFetchHeaders } from "./media-fetch";
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+// Status writes previously ignored the returned `error`, so a failed update
+// (RLS drift, network blip) silently left rows in stale states. These helpers
+// log every failure with enough context to trace the job.
+async function updateJob(
+  admin: AdminClient,
+  jobId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await admin
+    .from("ingestion_jobs")
+    .update(patch)
+    .eq("id", jobId);
+  if (error) {
+    console.error("[ingestion] ingestion_jobs update failed", {
+      jobId,
+      patch,
+      error,
+    });
+  }
+}
+
+async function updateInspo(
+  admin: AdminClient,
+  inspoId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await admin.from("inspo").update(patch).eq("id", inspoId);
+  if (error) {
+    console.error("[ingestion] inspo update failed", { inspoId, patch, error });
+  }
+}
+
+const THUMBNAIL_FETCH_TIMEOUT_MS = 10_000;
+const THUMBNAIL_MAX_BYTES = 5 * 1024 * 1024;
+
+// Platform CDN thumbnail URLs are signed and expire within ~24h, rotting the
+// library tiles. Copy the bytes into our public `thumbnails` bucket and store
+// that stable URL instead. Never fatal — on any failure we keep the original.
+async function persistThumbnail(
+  admin: AdminClient,
+  userId: string,
+  inspoId: string,
+  sourceUrl: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(sourceUrl, {
+      signal: AbortSignal.timeout(THUMBNAIL_FETCH_TIMEOUT_MS),
+      headers: buildMediaFetchHeaders(sourceUrl),
+    });
+    if (!res.ok) {
+      throw new Error(`thumbnail fetch failed: HTTP ${res.status}`);
+    }
+
+    const bytes = await res.arrayBuffer();
+    if (bytes.byteLength > THUMBNAIL_MAX_BYTES) {
+      throw new Error(
+        `thumbnail exceeds size cap (${bytes.byteLength} > ${THUMBNAIL_MAX_BYTES} bytes)`,
+      );
+    }
+
+    const contentType =
+      res.headers.get("content-type")?.split(";")[0].trim() || "image/jpeg";
+    const path = `${userId}/${inspoId}.jpg`;
+
+    const { error } = await admin.storage
+      .from("thumbnails")
+      .upload(path, bytes, { contentType, upsert: true });
+    if (error) throw error;
+
+    return admin.storage.from("thumbnails").getPublicUrl(path).data.publicUrl;
+  } catch (e) {
+    console.error(
+      "[ingestion] thumbnail persist failed — keeping original URL",
+      { inspoId },
+      e,
+    );
+    return null;
+  }
+}
 
 /**
  * Owns the lifecycle of a single ingestion job:
@@ -45,7 +129,7 @@ export class InlineIngestionService implements ContentIngestionService {
         inspo_id: input.inspoId,
         provider: this.downloader.name,
         status: "queued",
-        attempts: 0,
+        attempts: input.attempt ?? 1,
       })
       .select("id")
       .single();
@@ -54,13 +138,10 @@ export class InlineIngestionService implements ContentIngestionService {
       throw new Error(jobErr?.message ?? "Failed to create ingestion job.");
     }
 
-    await admin
-      .from("inspo")
-      .update({
-        media_status: "queued",
-        analysis_status: "queued",
-      })
-      .eq("id", input.inspoId);
+    await updateInspo(admin, input.inspoId, {
+      media_status: "queued",
+      analysis_status: "queued",
+    });
 
     // Fire-and-forget the analyze step. `waitUntil` keeps the serverless
     // function alive past the response so the work isn't killed mid-flight.
@@ -77,19 +158,13 @@ export class InlineIngestionService implements ContentIngestionService {
     const admin = createAdminClient();
     const startedAt = new Date().toISOString();
 
-    await admin
-      .from("ingestion_jobs")
-      .update({
-        status: "downloading",
-        started_at: startedAt,
-        attempts: 1,
-      })
-      .eq("id", jobId);
+    // `attempts` is set once at insert time in enqueue() — don't reset it here.
+    await updateJob(admin, jobId, {
+      status: "downloading",
+      started_at: startedAt,
+    });
 
-    await admin
-      .from("inspo")
-      .update({ media_status: "queued" })
-      .eq("id", input.inspoId);
+    await updateInspo(admin, input.inspoId, { media_status: "queued" });
 
     // 1. Download
     const dl = this.downloader.canHandle(input.url)
@@ -103,45 +178,53 @@ export class InlineIngestionService implements ContentIngestionService {
         };
 
     if (!dl.success) {
-      await admin
-        .from("ingestion_jobs")
-        .update({
-          status: "failed",
-          error_code: dl.errorCode ?? "download_failed",
-          error_message: dl.errorMessage ?? "Download failed.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId);
+      // Providers own user-safe humanization of download failures (see
+      // humanizeCobaltError); the mapper supplies the fallback and the raw
+      // details are logged either way.
+      const fallback = userSafeJobError("download", jobId, {
+        errorCode: dl.errorCode,
+        errorMessage: dl.errorMessage,
+      });
+      await updateJob(admin, jobId, {
+        status: "failed",
+        error_code: dl.errorCode ?? "download_failed",
+        error_message: dl.errorMessage ?? fallback,
+        completed_at: new Date().toISOString(),
+      });
 
-      await admin
-        .from("inspo")
-        .update({
-          media_status: "failed",
-          analysis_status: "failed",
-          metrics_status: "unavailable",
-          access_status: "unavailable",
-        })
-        .eq("id", input.inspoId);
+      await updateInspo(admin, input.inspoId, {
+        media_status: "failed",
+        analysis_status: "failed",
+        metrics_status: "unavailable",
+        access_status: "unavailable",
+      });
       return;
     }
 
-    await admin
-      .from("ingestion_jobs")
-      .update({ status: "downloaded" })
-      .eq("id", jobId);
+    await updateJob(admin, jobId, { status: "downloaded" });
 
-    await admin
-      .from("inspo")
-      .update({
-        media_status: "downloaded",
-        thumbnail_url: dl.thumbnailUrl ?? null,
-        duration_seconds: dl.durationSeconds ?? null,
-        creator_handle: dl.creatorHandle ?? null,
-        caption: dl.caption ?? null,
-        media_storage_url: dl.mediaFileUrl ?? null,
-        access_status: "accessible",
-      })
-      .eq("id", input.inspoId);
+    // Copy the (expiring) platform CDN thumbnail into Supabase Storage and
+    // store the stable public URL. Falls back to the original on any failure.
+    let thumbnailUrl = dl.thumbnailUrl ?? null;
+    if (thumbnailUrl) {
+      const stored = await persistThumbnail(
+        admin,
+        input.userId,
+        input.inspoId,
+        thumbnailUrl,
+      );
+      if (stored) thumbnailUrl = stored;
+    }
+
+    await updateInspo(admin, input.inspoId, {
+      media_status: "downloaded",
+      thumbnail_url: thumbnailUrl,
+      duration_seconds: dl.durationSeconds ?? null,
+      creator_handle: dl.creatorHandle ?? null,
+      caption: dl.caption ?? null,
+      media_storage_url: dl.mediaFileUrl ?? null,
+      access_status: "accessible",
+    });
 
     // 2. Look up the inspo + user context for personalization
     const [{ data: inspoRow }, { data: userRow }] = await Promise.all([
@@ -160,36 +243,21 @@ export class InlineIngestionService implements ContentIngestionService {
     ]);
 
     if (!inspoRow || !userRow) {
-      await admin
-        .from("ingestion_jobs")
-        .update({
-          status: "failed",
-          error_code: "context_missing",
-          error_message: "Could not load inspo or user context.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId);
-      await admin
-        .from("inspo")
-        .update({ analysis_status: "failed" })
-        .eq("id", input.inspoId);
+      await updateJob(admin, jobId, {
+        status: "failed",
+        error_code: "context_missing",
+        error_message: "Could not load inspo or user context.",
+        completed_at: new Date().toISOString(),
+      });
+      await updateInspo(admin, input.inspoId, { analysis_status: "failed" });
       return;
     }
 
-    await admin
-      .from("ingestion_jobs")
-      .update({ status: "uploading_to_gemini" })
-      .eq("id", jobId);
+    await updateJob(admin, jobId, { status: "uploading_to_gemini" });
 
-    await admin
-      .from("ingestion_jobs")
-      .update({ status: "analyzing" })
-      .eq("id", jobId);
+    await updateJob(admin, jobId, { status: "analyzing" });
 
-    await admin
-      .from("inspo")
-      .update({ analysis_status: "processing" })
-      .eq("id", input.inspoId);
+    await updateInspo(admin, input.inspoId, { analysis_status: "processing" });
 
     // 3. Analyze
     let analysis;
@@ -216,20 +284,14 @@ export class InlineIngestionService implements ContentIngestionService {
         },
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Analysis failed.";
-      await admin
-        .from("ingestion_jobs")
-        .update({
-          status: "failed",
-          error_code: "analysis_failed",
-          error_message: msg,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId);
-      await admin
-        .from("inspo")
-        .update({ analysis_status: "failed" })
-        .eq("id", input.inspoId);
+      await updateJob(admin, jobId, {
+        status: "failed",
+        error_code: "analysis_failed",
+        // Raw exception text (Zod dumps, HTTP codes) is logged, not stored.
+        error_message: userSafeJobError("analysis", jobId, e),
+        completed_at: new Date().toISOString(),
+      });
+      await updateInspo(admin, input.inspoId, { analysis_status: "failed" });
       return;
     }
 
@@ -262,40 +324,29 @@ export class InlineIngestionService implements ContentIngestionService {
       );
 
     if (upsertErr) {
-      await admin
-        .from("ingestion_jobs")
-        .update({
-          status: "failed",
-          error_code: "persist_failed",
-          error_message: upsertErr.message,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId);
-      await admin
-        .from("inspo")
-        .update({ analysis_status: "failed" })
-        .eq("id", input.inspoId);
+      await updateJob(admin, jobId, {
+        status: "failed",
+        error_code: "persist_failed",
+        // Raw Postgres error is logged, not stored.
+        error_message: userSafeJobError("persist", jobId, upsertErr),
+        completed_at: new Date().toISOString(),
+      });
+      await updateInspo(admin, input.inspoId, { analysis_status: "failed" });
       return;
     }
 
-    await admin
-      .from("ingestion_jobs")
-      .update({
-        status: "complete",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
+    await updateJob(admin, jobId, {
+      status: "complete",
+      completed_at: new Date().toISOString(),
+    });
 
-    await admin
-      .from("inspo")
-      .update({
-        analysis_status: "complete",
-        last_analyzed_at: new Date().toISOString(),
-        // Phase 1 has no real metrics provider — mark unavailable so the UI
-        // shows the right empty state instead of a perpetual loader.
-        metrics_status: "unavailable",
-      })
-      .eq("id", input.inspoId);
+    await updateInspo(admin, input.inspoId, {
+      analysis_status: "complete",
+      last_analyzed_at: new Date().toISOString(),
+      // Phase 1 has no real metrics provider — mark unavailable so the UI
+      // shows the right empty state instead of a perpetual loader.
+      metrics_status: "unavailable",
+    });
   }
 }
 

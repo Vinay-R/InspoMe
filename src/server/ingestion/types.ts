@@ -63,6 +63,8 @@ export type IngestionInput = {
   userId: string;
   url: string;
   platform: Platform;
+  /** 1-based attempt counter. Defaults to 1; retries pass previous + 1. */
+  attempt?: number;
 };
 
 export interface ContentIngestionService {

@@ -141,12 +141,16 @@ export class ApifyTikTokProvider implements MediaDownloadProvider {
 
     const item = items[0];
     if (!item || item.error) {
+      // Apify's `error` string is a raw internal message — log it for
+      // diagnosis, but never surface it to the user verbatim.
+      if (item?.error) {
+        console.error("[apify-tiktok] actor returned error item", item.error);
+      }
       return failure(
         parsed.platform,
         url,
         "tiktok_post_unavailable",
-        item?.error ??
-          "This TikTok video isn't available — it may be deleted, private, or region-locked.",
+        "This TikTok video isn't available — it may be deleted, private, or region-locked.",
       );
     }
 

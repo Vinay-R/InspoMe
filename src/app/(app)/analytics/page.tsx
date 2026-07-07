@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AnalyticsView } from "./analytics-view";
 import type {
-  ConnectedAccountRow,
+  ConnectedAccountClientRow,
   CreatorPostRow,
   PostMetricSnapshotRow,
   AnalyticsInsightRow,
@@ -32,8 +32,11 @@ export default async function AnalyticsPage({
   const [accountsRes, postsRes, snapshotsRes, insightsRes] = await Promise.all([
     supabase
       .from("connected_accounts")
+      // Deliberately excludes access_token_encrypted / refresh_token_encrypted:
+      // rows are handed to a "use client" component and would otherwise ship
+      // in the RSC payload.
       .select(
-        "id, user_id, platform, platform_user_id, username, display_name, avatar_url, access_token_encrypted, refresh_token_encrypted, token_expires_at, scopes, connection_status, is_mock, last_synced_at, last_sync_error, created_at, updated_at",
+        "id, user_id, platform, platform_user_id, username, display_name, avatar_url, token_expires_at, scopes, connection_status, is_mock, last_synced_at, last_sync_error, created_at, updated_at",
       )
       .order("platform"),
     supabase
@@ -61,7 +64,7 @@ export default async function AnalyticsPage({
   return (
     <AnalyticsView
       window={window}
-      accounts={(accountsRes.data ?? []) as ConnectedAccountRow[]}
+      accounts={(accountsRes.data ?? []) as ConnectedAccountClientRow[]}
       posts={(postsRes.data ?? []) as CreatorPostRow[]}
       snapshots={(snapshotsRes.data ?? []) as PostMetricSnapshotRow[]}
       insights={(insightsRes.data ?? []) as AnalyticsInsightRow[]}

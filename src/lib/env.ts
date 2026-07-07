@@ -28,6 +28,12 @@ export const env = {
 };
 
 export const serverEnv = {
+  get isProduction(): boolean {
+    return process.env.NODE_ENV === "production";
+  },
+  get tokenEncryptionKey(): string | null {
+    return process.env.TOKEN_ENCRYPTION_KEY?.trim() || null;
+  },
   get supabaseServiceRoleKey(): string {
     return requireEnv(
       "SUPABASE_SERVICE_ROLE_KEY",

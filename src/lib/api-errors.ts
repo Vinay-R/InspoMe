@@ -11,13 +11,20 @@ const USER_MESSAGES: Record<string, string> = {
   rate_limited: "You've saved too many items recently. Try again in an hour.",
   save_failed: "We couldn't save that right now. Please try again.",
   enqueue_failed: "Saved, but analysis couldn't start. Use the retry button.",
+  analysis_in_progress: "An analysis is already running for this save.",
   account_not_connected: "That account isn't connected yet.",
   sync_in_progress: "We're already syncing this account. Hang tight.",
   provider_unavailable: "That platform isn't available to sync right now.",
   internal: "Something went wrong on our end. Please try again.",
 };
 
-type ErrorCode = keyof typeof USER_MESSAGES;
+export type ApiErrorCode = keyof typeof USER_MESSAGES;
+type ErrorCode = ApiErrorCode;
+
+/** Catalog message for a code — for embedding in otherwise-successful bodies. */
+export function userMessageFor(code: ApiErrorCode): string {
+  return USER_MESSAGES[code];
+}
 
 interface ErrorResponseOptions {
   /** Raw error for server-side logging (never sent to client in prod). */
@@ -37,6 +44,7 @@ const STATUS_MAP: Partial<Record<ErrorCode, number>> = {
   rate_limited: 429,
   account_not_connected: 404,
   sync_in_progress: 409,
+  analysis_in_progress: 409,
   provider_unavailable: 503,
 };
 

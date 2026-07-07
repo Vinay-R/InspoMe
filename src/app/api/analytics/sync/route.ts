@@ -8,6 +8,10 @@ import { apiError, rateLimitedResponse } from "@/lib/api-errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getAnalyticsService } from "@/server/analytics/service";
 
+// Sync work runs inside waitUntil past the response. 300s is the safe
+// cross-plan ceiling; Pro plans can raise it to 800.
+export const maxDuration = 300;
+
 const Schema = z.object({
   platform: z.enum(["instagram", "tiktok"]).optional(),
 });

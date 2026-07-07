@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
   AnalyticsInsightRow,
-  ConnectedAccountRow,
+  ConnectedAccountClientRow,
   CreatorPostRow,
   PostMetricSnapshotRow,
 } from "@/lib/supabase/types";
@@ -38,7 +38,7 @@ const WINDOW_OPTIONS = [7, 30, 90] as const;
 
 interface Props {
   window: 7 | 30 | 90;
-  accounts: ConnectedAccountRow[];
+  accounts: ConnectedAccountClientRow[];
   posts: CreatorPostRow[];
   snapshots: PostMetricSnapshotRow[];
   insights: AnalyticsInsightRow[];
@@ -75,7 +75,7 @@ export function AnalyticsView({
           setAccounts(json.data);
           // If sync just completed, refresh server data.
           const stillSyncing = json.data.some(
-            (a: ConnectedAccountRow) => a.connection_status === "syncing",
+            (a: ConnectedAccountClientRow) => a.connection_status === "syncing",
           );
           if (!stillSyncing) router.refresh();
         }

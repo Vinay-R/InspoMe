@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatRelativeTime } from "@/lib/utils";
-import type { ConnectedAccountRow } from "@/lib/supabase/types";
+import type { ConnectedAccountClientRow } from "@/lib/supabase/types";
 
 const PLATFORMS = [
   { key: "instagram" as const, label: "Instagram" },
@@ -14,8 +14,8 @@ const PLATFORMS = [
 ];
 
 interface Props {
-  accounts: ConnectedAccountRow[];
-  onAccountsUpdate?: (next: ConnectedAccountRow[]) => void;
+  accounts: ConnectedAccountClientRow[];
+  onAccountsUpdate?: (next: ConnectedAccountClientRow[]) => void;
   compact?: boolean;
 }
 
@@ -144,7 +144,7 @@ export function ConnectAccountsCard({ accounts, onAccountsUpdate, compact }: Pro
   );
 }
 
-function ConnectionBadge({ account }: { account: ConnectedAccountRow }) {
+function ConnectionBadge({ account }: { account: ConnectedAccountClientRow }) {
   if (account.connection_status === "syncing") {
     return (
       <Badge variant="secondary">

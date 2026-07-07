@@ -52,6 +52,13 @@ interface Props {
   initialJob: IngestionJobRow | null;
 }
 
+const POLL_FAST_MS = 2000;
+const POLL_SLOW_MS = 10_000;
+const POLL_SLOW_AFTER_MS = 90_000;
+const POLL_STOP_AFTER_MS = 10 * 60_000;
+
+type PollPhase = "fast" | "slow" | "stopped";
+
 export function InspoDetailView({
   initialInspo,
   initialAnalysis,
@@ -64,15 +71,37 @@ export function InspoDetailView({
   const [metrics, setMetrics] = React.useState(initialMetrics);
   const [job, setJob] = React.useState(initialJob);
   const [retrying, setRetrying] = React.useState(false);
+  const [retryError, setRetryError] = React.useState<string | null>(null);
   const [archiving, setArchiving] = React.useState(false);
+  const [pollPhase, setPollPhase] = React.useState<PollPhase>("fast");
+  const pollingSinceRef = React.useRef<number | null>(null);
 
   const isPending =
     inspo.analysis_status === "queued" || inspo.analysis_status === "processing";
+  const analysisDelayed = isPending && pollPhase !== "fast";
 
-  // Poll while pending so the user sees sections fill in live.
+  // Poll while pending so the user sees sections fill in live. After 90s of
+  // continuous pending we back off to a slow interval; after 10 minutes we
+  // stop entirely (the server-side reaper will have failed the job by then).
   React.useEffect(() => {
-    if (!isPending) return;
+    if (!isPending) {
+      pollingSinceRef.current = null;
+      return;
+    }
+    if (pollPhase === "stopped") return;
+    if (pollingSinceRef.current === null) {
+      pollingSinceRef.current = Date.now();
+    }
+    const startedAt = pollingSinceRef.current;
     const interval = setInterval(async () => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= POLL_STOP_AFTER_MS) {
+        setPollPhase("stopped");
+        return;
+      }
+      if (elapsed >= POLL_SLOW_AFTER_MS) {
+        setPollPhase((p) => (p === "fast" ? "slow" : p));
+      }
       try {
         const res = await fetch(`/api/inspo/${inspo.id}`, {
           cache: "no-store",
@@ -88,19 +117,42 @@ export function InspoDetailView({
       } catch {
         // keep last good state
       }
-    }, 2000);
+    }, pollPhase === "slow" ? POLL_SLOW_MS : POLL_FAST_MS);
     return () => clearInterval(interval);
-  }, [isPending, inspo.id]);
+  }, [isPending, inspo.id, pollPhase]);
 
   async function retry() {
     setRetrying(true);
+    setRetryError(null);
     try {
-      await fetch(`/api/inspo/${inspo.id}/retry-analysis`, { method: "POST" });
+      const res = await fetch(`/api/inspo/${inspo.id}/retry-analysis`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        // The API returns a user-safe `error` message (429 rate limit,
+        // 409 already running, …) — surface it instead of lying with a
+        // fake "queued" state.
+        let message = "Couldn't restart the analysis. Please try again.";
+        try {
+          const json = await res.json();
+          if (typeof json?.error === "string" && json.error) {
+            message = json.error;
+          }
+        } catch {
+          // non-JSON body — keep the generic message
+        }
+        setRetryError(message);
+        return;
+      }
+      pollingSinceRef.current = null;
+      setPollPhase("fast");
       setInspo((s) => ({
         ...s,
         analysis_status: "queued",
         media_status: "queued",
       }));
+    } catch {
+      setRetryError("Network error. Check your connection and try again.");
     } finally {
       setRetrying(false);
     }
@@ -131,6 +183,7 @@ export function InspoDetailView({
         onRetry={retry}
         onArchive={archive}
         retrying={retrying}
+        retryError={retryError}
         archiving={archiving}
       />
 
@@ -146,7 +199,14 @@ export function InspoDetailView({
       />
 
       {/* While we wait for the first analysis, show progress + skeletons */}
-      {isPending && !analysis && <PendingAnalysisCard job={job} />}
+      {isPending && !analysis && (
+        <PendingAnalysisCard
+          job={job}
+          delayed={analysisDelayed}
+          onRetry={retry}
+          retrying={retrying}
+        />
+      )}
 
       {/* C. AI Executive Summary */}
       {analysis && <SummarySection analysis={analysis} />}
@@ -199,12 +259,14 @@ function MediaHeader({
   onRetry,
   onArchive,
   retrying,
+  retryError,
   archiving,
 }: {
   inspo: InspoRow;
   onRetry: () => void;
   onArchive: () => void;
   retrying: boolean;
+  retryError: string | null;
   archiving: boolean;
 }) {
   return (
@@ -262,32 +324,39 @@ function MediaHeader({
             </div>
           )}
 
-          <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onRetry}
-              disabled={retrying}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-60"
-            >
-              <RefreshCcw
-                className={cn("size-3.5", retrying && "animate-spin")}
-              />
-              {inspo.analysis_status === "complete"
-                ? "Re-analyze"
-                : "Retry analysis"}
-            </button>
-            <span className="text-muted-foreground" aria-hidden>
-              ·
-            </span>
-            <button
-              type="button"
-              onClick={onArchive}
-              disabled={archiving}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-destructive disabled:opacity-60"
-            >
-              <Trash2 className="size-3.5" />
-              Archive
-            </button>
+          <div className="mt-auto flex flex-col gap-1.5 pt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={retrying}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-60"
+              >
+                <RefreshCcw
+                  className={cn("size-3.5", retrying && "animate-spin")}
+                />
+                {inspo.analysis_status === "complete"
+                  ? "Re-analyze"
+                  : "Retry analysis"}
+              </button>
+              <span className="text-muted-foreground" aria-hidden>
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={onArchive}
+                disabled={archiving}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-destructive disabled:opacity-60"
+              >
+                <Trash2 className="size-3.5" />
+                Archive
+              </button>
+            </div>
+            {retryError && (
+              <p role="alert" className="text-xs text-destructive">
+                {retryError}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -311,7 +380,17 @@ function AnalysisPill({ status }: { status: InspoRow["analysis_status"] }) {
   return <Badge variant="secondary">Saved</Badge>;
 }
 
-function PendingAnalysisCard({ job }: { job: IngestionJobRow | null }) {
+function PendingAnalysisCard({
+  job,
+  delayed,
+  onRetry,
+  retrying,
+}: {
+  job: IngestionJobRow | null;
+  delayed: boolean;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
   return (
     <Card>
       <CardContent className="flex items-start gap-3 p-5">
@@ -328,6 +407,24 @@ function PendingAnalysisCard({ job }: { job: IngestionJobRow | null }) {
             {!job?.status &&
               "Hook, structure, visuals, and reusable pattern coming up."}
           </p>
+          {delayed && (
+            <div className="mt-3">
+              <p className="text-sm text-muted-foreground">
+                This is taking longer than usual. You can keep waiting or
+                retry.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={onRetry}
+                loading={retrying}
+              >
+                <RefreshCcw className="size-4" />
+                Retry analysis
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

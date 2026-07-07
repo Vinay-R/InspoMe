@@ -6,6 +6,10 @@ import { serverEnv } from "@/lib/env";
 // Lazy singleton — only created when Upstash creds are present.
 let _rl: Ratelimit | null = null;
 
+// Warn loudly (but only once per process) when rate limiting is disabled in
+// production — a silent no-op limiter is an easy misconfiguration to miss.
+let warnedDisabled = false;
+
 function getRatelimiter(): Ratelimit | null {
   if (_rl) return _rl;
   const url = serverEnv.upstashRedisRestUrl;
@@ -32,8 +36,23 @@ export interface RateLimitResult {
  */
 export async function checkRateLimit(userId: string): Promise<RateLimitResult> {
   const rl = getRatelimiter();
-  if (!rl) return { allowed: true };
+  if (!rl) {
+    if (!warnedDisabled && serverEnv.isProduction) {
+      warnedDisabled = true;
+      console.warn(
+        "[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN not set — rate limiting is DISABLED in production. All requests are allowed.",
+      );
+    }
+    return { allowed: true };
+  }
 
-  const { success, reset } = await rl.limit(userId);
-  return { allowed: success, resetAt: reset };
+  try {
+    const { success, reset } = await rl.limit(userId);
+    return { allowed: success, resetAt: reset };
+  } catch (e) {
+    // Explicit decision: fail OPEN on Upstash outages. Saves are low-risk and
+    // an unavailable rate limiter must not turn every save into a 500.
+    console.error("[rate-limit] Upstash check failed — failing open", e);
+    return { allowed: true };
+  }
 }
