@@ -10,6 +10,7 @@ import type {
   VideoAnalysisProvider,
 } from "./types";
 import { ApifyTikTokProvider } from "./providers/apify-tiktok";
+import { ApifyInstagramProvider } from "./providers/apify-instagram";
 import { CobaltProvider } from "./providers/cobalt";
 import { GeminiProvider } from "./providers/gemini";
 import { StubCobaltProvider } from "./providers/stub-cobalt";
@@ -357,10 +358,11 @@ let cached: InlineIngestionService | null = null;
 // `npm run dev` workable on a fresh clone without external services, while
 // production (env set in Vercel) automatically goes live.
 //
-// TikTok and Instagram have different reliability profiles, so we route by
-// platform: TikTok → Apify (Cobalt's datacenter IPs are blocked by TikTok),
-// Instagram → Cobalt. Both fall back to the stub when their credentials are
-// absent.
+// Both platforms route through Apify: TikTok (Cobalt's datacenter IPs are
+// blocked by TikTok) and Instagram (Apify's reel actor gives us a stable
+// hosted MP4 + transcript, vs. Cobalt's expiring IG CDN URLs and a server we
+// have to host). Cobalt survives only as a no-Apify-token fallback for IG and
+// is slated for decommission once Apify IG parity is confirmed in prod.
 class RoutingDownloadProvider implements MediaDownloadProvider {
   readonly name = "routing";
 
@@ -393,8 +395,9 @@ function selectDownloader(): MediaDownloadProvider {
     ? new ApifyTikTokProvider()
     : new StubCobaltProvider();
 
-  const instagram: MediaDownloadProvider =
-    serverEnv.cobaltApiUrl && serverEnv.cobaltApiKey
+  const instagram: MediaDownloadProvider = serverEnv.apifyApiToken
+    ? new ApifyInstagramProvider()
+    : serverEnv.cobaltApiUrl && serverEnv.cobaltApiKey
       ? new CobaltProvider()
       : new StubCobaltProvider();
 

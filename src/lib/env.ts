@@ -57,6 +57,22 @@ export const serverEnv = {
     // alternate actor. Format: "username/actor-name".
     return process.env.APIFY_TIKTOK_ACTOR?.trim() || "clockworks/tiktok-scraper";
   },
+  get apifyInstagramReelActor(): string {
+    // Primary IG downloader. Returns an Apify-hosted MP4 (downloadedVideo) +
+    // transcript when the include* flags are set. Format: "username/actor-name".
+    return (
+      process.env.APIFY_INSTAGRAM_REEL_ACTOR?.trim() ||
+      "apify/instagram-reel-scraper"
+    );
+  },
+  get apifyInstagramPostActor(): string {
+    // Fallback for non-reel video posts / carousels (the reel actor returns
+    // empty for those). Format: "username/actor-name".
+    return (
+      process.env.APIFY_INSTAGRAM_POST_ACTOR?.trim() ||
+      "apify/instagram-post-scraper"
+    );
+  },
   get upstashRedisRestUrl(): string | null {
     return process.env.UPSTASH_REDIS_REST_URL?.trim() || null;
   },
