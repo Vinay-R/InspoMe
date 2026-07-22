@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 
 export const metadata: Metadata = {
-  title: "InspoMe — Stop saving. Start studying.",
+  title: "InspoMe — AI analyze your favorite posts.",
   description:
     "Save TikToks and Reels, and InspoMe breaks each one down — hook, structure, visuals, editing — into a pattern you can reuse in your next video.",
 };
@@ -67,12 +67,14 @@ export default async function HomePage() {
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-brand">
             For short-form creators
           </p>
-          <h1 className="font-display text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
-            Stop saving.
+          <h1 className="font-display text-4xl font-semibold leading-[1.1] tracking-tight md:text-5xl">
+            AI Analyze Your Favorite Posts.
             <br />
-            Start studying.
+            Re-use Viral Formats.
+            <br />
+            Make Better Content.
           </h1>
-          <p className="max-w-md text-base leading-relaxed text-muted-foreground md:text-lg">
+          <p className="max-w-md text-base leading-relaxed text-foreground/80 md:text-lg">
             Your saved folder is full of videos you&apos;ll never rewatch.
             InspoMe breaks each one down — hook, structure, visuals, editing —
             into a pattern you can reuse in your next video.
@@ -94,8 +96,65 @@ export default async function HomePage() {
           </div>
         </section>
 
+        {/* How it works */}
+        <section className="border-t border-border pb-14 pt-14 md:pb-20 md:pt-20">
+          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            How it works
+          </h2>
+          <div className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-3 sm:gap-6">
+            <div className="flex flex-col gap-3">
+              <div className="inline-flex size-10 items-center justify-center rounded-lg bg-brand/15 text-brand">
+                <Link2 className="size-5" />
+              </div>
+              <div>
+                <p className="font-medium">Paste a link</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  Drop any TikTok or Reel into your library the moment it stops
+                  your scroll.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div className="inline-flex size-10 items-center justify-center rounded-lg bg-brand/15 text-brand">
+                <ScanSearch className="size-5" />
+              </div>
+              <div>
+                <p className="font-medium">We break it down</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  AI watches the video and maps the hook, beats, visuals, and
+                  editing choices.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div className="inline-flex size-10 items-center justify-center rounded-lg bg-brand/15 text-brand">
+                <Repeat2 className="size-5" />
+              </div>
+              <div>
+                <p className="font-medium">Reuse the pattern</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  Take the template and shoot your version — same mechanics,
+                  your voice.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-10">
+            <Link
+              href="/login"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-brand px-6 text-base font-medium text-brand-foreground shadow-sm transition-colors hover:bg-brand/90"
+            >
+              Save your first inspo
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        </section>
+
         {/* Example analysis */}
-        <section id="example" className="scroll-mt-20 pb-14 md:pb-20">
+        <section
+          id="example"
+          className="scroll-mt-20 border-t border-border pb-16 pt-14 md:pb-24 md:pt-20"
+        >
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge variant="brand">Example analysis</Badge>
             <p className="text-sm text-muted-foreground">
@@ -231,59 +290,6 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* How it works */}
-        <section className="border-t border-border pb-16 pt-14 md:pb-24 md:pt-20">
-          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            How it works
-          </h2>
-          <div className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-3 sm:gap-6">
-            <div className="flex flex-col gap-3">
-              <div className="inline-flex size-10 items-center justify-center rounded-lg bg-brand/15 text-brand">
-                <Link2 className="size-5" />
-              </div>
-              <div>
-                <p className="font-medium">Paste a link</p>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  Drop any TikTok or Reel into your library the moment it stops
-                  your scroll.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-3">
-              <div className="inline-flex size-10 items-center justify-center rounded-lg bg-brand/15 text-brand">
-                <ScanSearch className="size-5" />
-              </div>
-              <div>
-                <p className="font-medium">We break it down</p>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  AI watches the video and maps the hook, beats, visuals, and
-                  editing choices.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-3">
-              <div className="inline-flex size-10 items-center justify-center rounded-lg bg-brand/15 text-brand">
-                <Repeat2 className="size-5" />
-              </div>
-              <div>
-                <p className="font-medium">Reuse the pattern</p>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  Take the template and shoot your version — same mechanics,
-                  your voice.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="mt-10">
-            <Link
-              href="/login"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-brand px-6 text-base font-medium text-brand-foreground shadow-sm transition-colors hover:bg-brand/90"
-            >
-              Save your first inspo
-              <ArrowRight className="size-4" />
-            </Link>
-          </div>
-        </section>
       </main>
 
       <footer className="border-t border-border">
