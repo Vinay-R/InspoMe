@@ -72,7 +72,7 @@ export default async function HomePage() {
             <br />
             Re-use Viral Formats.
             <br />
-            Make It Yours.
+            Make Better Content.
           </h1>
           <p className="max-w-md text-base leading-relaxed text-foreground/80 md:text-lg">
             Your saved folder is full of videos you&apos;ll never rewatch.
