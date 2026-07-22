@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 
 export const metadata: Metadata = {
-  title: "InspoMe — AI analyze your favorite posts.",
+  title: "InspoMe — Decode your favorite posts.",
   description:
     "Save TikToks and Reels, and InspoMe breaks each one down — hook, structure, visuals, editing — into a pattern you can reuse in your next video.",
 };
@@ -68,11 +68,11 @@ export default async function HomePage() {
             For short-form creators
           </p>
           <h1 className="font-display text-4xl font-semibold leading-[1.1] tracking-tight md:text-5xl">
-            AI Analyze Your Favorite Posts.
+            Decode Your Favorite Posts.
             <br />
             Re-use Viral Formats.
             <br />
-            Make Better Content.
+            Make It Yours.
           </h1>
           <p className="max-w-md text-base leading-relaxed text-foreground/80 md:text-lg">
             Your saved folder is full of videos you&apos;ll never rewatch.
