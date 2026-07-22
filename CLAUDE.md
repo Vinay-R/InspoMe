@@ -15,7 +15,7 @@
 
 ## Architecture (one-paragraph mental model)
 
-User saves a URL → Next.js route inserts an `inspo` row + `ingestion_job` row → fires `waitUntil(this.run(...))` → `RoutingDownloadProvider` dispatches by platform (TikTok → `ApifyTikTokProvider`, IG → `CobaltProvider`) → media URL → `GeminiProvider` analyzes (inline base64 ≤18MB, Files API >18MB) → Zod-validates structured output → upserts `video_analysis` row → updates inspo statuses. Detail page renders the analysis with progressive states (`queued → downloaded → processing → complete`). All credentials are server-only; user data lives behind Supabase RLS.
+User saves a URL → Next.js route inserts an `inspo` row + `ingestion_job` row → fires `waitUntil(this.run(...))` → `RoutingDownloadProvider` dispatches by platform (TikTok → `ApifyTikTokProvider`, IG → `ApifyInstagramProvider`; Cobalt survives only as a no-Apify-token IG fallback, deletion pending) → media URL → thumbnail bytes copied to Supabase Storage → `GeminiProvider` analyzes (inline base64 ≤18MB, Files API >18MB) → Zod-validates structured output → upserts `video_analysis` row → updates inspo statuses. A pg_cron reaper fails any job stuck in-flight >15 min. Detail page renders the analysis with progressive states (`queued → downloaded → processing → complete`). All credentials are server-only; user data lives behind Supabase RLS.
 
 ## Where to find what
 
@@ -46,9 +46,9 @@ Public (browser-readable):
 Server-only:
 - `SUPABASE_SERVICE_ROLE_KEY` — admin client; backend writes only.
 - `GEMINI_API_KEY` — Google AI Studio. Falls back to stub if absent.
-- `COBALT_API_URL` (must include `https://` scheme!), `COBALT_API_KEY` — Instagram downloads. Stub fallback.
-- `APIFY_API_TOKEN` — TikTok via Apify. Stub fallback.
-- `APIFY_TIKTOK_ACTOR` (optional) — defaults to `clockworks/tiktok-scraper`.
+- `APIFY_API_TOKEN` — TikTok **and Instagram** downloads. Stub fallback when absent.
+- `APIFY_TIKTOK_ACTOR`, `APIFY_INSTAGRAM_REEL_ACTOR`, `APIFY_INSTAGRAM_POST_ACTOR` (all optional) — default to `clockworks/tiktok-scraper`, `apify/instagram-reel-scraper`, `apify/instagram-post-scraper`.
+- `COBALT_API_URL` (must include `https://` scheme!), `COBALT_API_KEY` — **legacy** IG fallback, used only when no Apify token; slated for removal.
 
 `.env.example` has the full list with comments.
 
